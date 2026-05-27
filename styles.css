@@ -90,6 +90,55 @@ textarea#paste-area {
 }
 .checkbox input { margin: 0; }
 
+.account-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 10px;
+}
+.field.inline { margin-bottom: 0; }
+.field.inline select {
+  display: block;
+  margin-top: 4px;
+  padding: 8px 10px;
+  min-width: 320px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+.account-form {
+  margin-top: 16px;
+  padding: 16px;
+  background: #f9fafb;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+}
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
+.btn-danger { background: #fee2e2; color: #b91c1c; }
+.btn-danger:hover { background: #fecaca; }
+
+.mapping-fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.mapping-field label {
+  display: block;
+  font-size: 0.88rem;
+  margin-bottom: 4px;
+  font-weight: 600;
+}
+.mapping-field select {
+  width: 100%;
+  padding: 8px 10px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+}
+.mapping-field .required { color: #dc2626; font-size: 0.78rem; margin-left: 4px; }
+
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: 10px;

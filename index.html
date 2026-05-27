@@ -9,11 +9,42 @@
 <body>
   <header>
     <h1>通帳CSV 摘要付与ツール</h1>
-    <p class="subtitle">キクチエステート用 / 通帳取引CSVを取り込み、摘要を入力してCSV出力します</p>
+    <p class="subtitle">キクチエステート用 / 口座ごとに通帳明細を取り込み・蓄積し、摘要を入力してCSV出力します</p>
   </header>
 
   <main>
-    <section id="import-section" class="card">
+    <!-- 0. 口座を選ぶ -->
+    <section id="account-section" class="card">
+      <h2>0. 口座を選ぶ</h2>
+      <div class="account-row">
+        <label class="field inline">
+          口座
+          <select id="account-select"></select>
+        </label>
+        <button type="button" id="account-new" class="btn">＋ 新しい口座を登録</button>
+        <button type="button" id="account-edit" class="btn">口座名を編集</button>
+        <button type="button" id="account-delete" class="btn btn-danger">この口座を削除</button>
+      </div>
+
+      <form id="account-form" class="account-form hidden">
+        <label class="field">
+          銀行名
+          <input type="text" id="bank-name" placeholder="例）三菱UFJ銀行 ○○支店">
+        </label>
+        <label class="field">
+          口座番号
+          <input type="text" id="account-number" placeholder="例）普通 1234567">
+        </label>
+        <div class="btn-row">
+          <button type="submit" id="account-save" class="btn btn-primary">保存</button>
+          <button type="button" id="account-cancel" class="btn">キャンセル</button>
+        </div>
+      </form>
+      <p id="account-status" class="status"></p>
+    </section>
+
+    <!-- 1. 取り込む -->
+    <section id="import-section" class="card hidden">
       <h2>1. 通帳データを取り込む</h2>
 
       <div class="tabs">
@@ -43,12 +74,28 @@
         <input type="checkbox" id="has-header" checked>
         1行目を見出し（項目名）として扱う
       </label>
+      <div class="btn-row" style="margin-top:10px;">
+        <button type="button" id="remap-btn" class="btn hidden">列の対応を変更する</button>
+      </div>
       <p id="file-status" class="status"></p>
     </section>
 
+    <!-- 1.5 列の対応（マッピング） -->
+    <section id="mapping-section" class="card hidden">
+      <h2>列の対応を設定する</h2>
+      <p class="hint">読み込んだデータの「どの列が何か」を選んでください。ここで設定した内容はこの口座に記憶され、次回からは自動で適用されます。</p>
+      <div id="mapping-fields" class="mapping-fields"></div>
+      <div class="btn-row">
+        <button type="button" id="mapping-apply" class="btn btn-primary">この設定で取り込む</button>
+        <button type="button" id="mapping-cancel" class="btn">やめる</button>
+      </div>
+      <p id="mapping-status" class="status"></p>
+    </section>
+
+    <!-- 2. 明細の確認・摘要入力 -->
     <section id="edit-section" class="card hidden">
-      <h2>2. 摘要を入力する</h2>
-      <p class="hint">「摘要」列のセルをクリックして入力できます。行の削除も可能です。</p>
+      <h2>2. 明細の確認・摘要の入力</h2>
+      <p class="hint"><span id="row-summary"></span>　黄色の列のセルをクリックして入力できます。不要な行は ✕ で削除できます（保存は自動です）。</p>
       <div class="table-wrap">
         <table id="data-table">
           <thead></thead>
@@ -57,6 +104,7 @@
       </div>
     </section>
 
+    <!-- 3. CSV出力 -->
     <section id="export-section" class="card hidden">
       <h2>3. CSVを出力する</h2>
       <label class="field">
@@ -65,6 +113,20 @@
       </label>
       <button id="export-btn" class="btn btn-primary">CSVをダウンロード</button>
       <p id="export-status" class="status"></p>
+    </section>
+
+    <!-- 4. バックアップと復元 -->
+    <section id="backup-section" class="card">
+      <h2>バックアップと復元</h2>
+      <p class="hint">このアプリのデータは、お使いのブラウザの中に保存されています。パソコンの買い替えやブラウザのデータ削除に備えて、ときどきバックアップを保存しておくことをおすすめします。</p>
+      <div class="btn-row">
+        <button type="button" id="backup-btn" class="btn btn-primary">バックアップを保存（ファイルに書き出し）</button>
+        <label class="btn">
+          バックアップから復元（ファイルを読み込み）
+          <input type="file" id="restore-input" accept=".json,application/json" hidden>
+        </label>
+      </div>
+      <p id="backup-status" class="status"></p>
     </section>
   </main>
 
