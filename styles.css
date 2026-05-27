@@ -22,11 +22,62 @@ body {
 header {
   background: var(--accent);
   color: #fff;
-  padding: 24px 32px;
+  padding: 18px 24px 0;
 }
 
-header h1 { margin: 0 0 4px; font-size: 1.5rem; }
-.subtitle { margin: 0; opacity: 0.9; font-size: 0.9rem; }
+.header-top {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+header h1 { margin: 0; font-size: 1.4rem; }
+
+.settings-btn {
+  background: rgba(255, 255, 255, 0.18);
+  color: #fff;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 6px;
+  padding: 7px 14px;
+  font-size: 0.92rem;
+  cursor: pointer;
+  white-space: nowrap;
+}
+.settings-btn:hover { background: rgba(255, 255, 255, 0.3); }
+
+/* Chromeタブ風の口座タブ */
+.account-tabs {
+  display: flex;
+  align-items: flex-end;
+  gap: 4px;
+  margin-top: 14px;
+  flex-wrap: wrap;
+}
+.acc-tab {
+  background: rgba(255, 255, 255, 0.25);
+  color: #eaf0ff;
+  border: none;
+  border-radius: 8px 8px 0 0;
+  padding: 8px 16px;
+  font-size: 0.9rem;
+  cursor: pointer;
+  max-width: 260px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.acc-tab:hover { background: rgba(255, 255, 255, 0.4); }
+.acc-tab.active {
+  background: var(--bg);
+  color: var(--text);
+  font-weight: 600;
+}
+.acc-tab.add {
+  background: transparent;
+  border: 1px dashed rgba(255, 255, 255, 0.7);
+  font-weight: 600;
+}
+.acc-tab.add:hover { background: rgba(255, 255, 255, 0.2); }
 
 main {
   max-width: 1100px;
@@ -90,29 +141,11 @@ textarea#paste-area {
 }
 .checkbox input { margin: 0; }
 
-.account-row {
+.account-fields {
   display: flex;
   flex-wrap: wrap;
-  align-items: flex-end;
-  gap: 10px;
-}
-.field.inline { margin-bottom: 0; }
-.field.inline select {
-  display: block;
-  margin-top: 4px;
-  padding: 8px 10px;
-  min-width: 320px;
-  max-width: 100%;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  font-size: 0.95rem;
-}
-.account-form {
-  margin-top: 16px;
-  padding: 16px;
-  background: #f9fafb;
-  border: 1px solid var(--border);
-  border-radius: 8px;
+  gap: 16px;
+  margin-bottom: 14px;
 }
 .btn-row { display: flex; gap: 10px; flex-wrap: wrap; }
 .btn-danger { background: #fee2e2; color: #b91c1c; }
@@ -233,3 +266,68 @@ td[contenteditable="true"]:focus {
   padding: 0 4px;
 }
 .del-btn:hover { color: #991b1b; }
+
+/* 設定パネル */
+.sep { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
+.card h3 { font-size: 1rem; margin: 0 0 6px; }
+.range-row { display: flex; align-items: center; gap: 16px; flex-wrap: wrap; }
+.range-selectors { font-size: 0.9rem; }
+.range-selectors select {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  margin: 0 2px;
+}
+.range-selectors.disabled { opacity: 0.4; pointer-events: none; }
+
+/* 区分セル・分類エディタ */
+.dir-badge {
+  display: inline-block;
+  font-size: 0.78rem;
+  padding: 1px 8px;
+  border-radius: 10px;
+  font-weight: 600;
+}
+.dir-in { background: #dcfce7; color: #166534; }
+.dir-out { background: #fee2e2; color: #991b1b; }
+.dir-none { background: #e5e7eb; color: #6b7280; }
+
+td.col-cat { min-width: 240px; white-space: normal; }
+.cat-summary { font-size: 0.85rem; }
+.cat-summary .entity { color: var(--accent); font-weight: 600; margin-right: 6px; }
+.cat-summary .empty { color: var(--muted); }
+.mismatch { color: #dc2626; font-weight: 600; font-size: 0.8rem; display: block; margin-top: 2px; }
+.edit-cat-btn {
+  margin-top: 4px;
+  background: #eef2ff;
+  border: 1px solid #c7d2fe;
+  color: var(--accent-dark);
+  border-radius: 6px;
+  padding: 3px 10px;
+  font-size: 0.82rem;
+  cursor: pointer;
+}
+.edit-cat-btn:hover { background: #e0e7ff; }
+
+.cat-editor td { background: #f9fafb; }
+.cat-editor-inner { padding: 8px 4px; }
+.entity-row { margin-bottom: 10px; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
+.entity-row label { font-size: 0.9rem; display: inline-flex; align-items: center; gap: 4px; }
+.items-table { width: auto; margin-bottom: 8px; }
+.items-table td { border: none; padding: 3px 4px; white-space: nowrap; }
+.items-table select, .items-table input {
+  padding: 6px 8px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+.items-table input { width: 130px; text-align: right; }
+.add-item-btn {
+  background: #e5e7eb; border: none; border-radius: 6px;
+  padding: 4px 12px; font-size: 0.85rem; cursor: pointer;
+}
+.add-item-btn:hover { background: #d1d5db; }
+.editor-total { font-size: 0.88rem; margin: 8px 0; }
+.editor-total .ng { color: #dc2626; font-weight: 600; }
+.editor-total .ok { color: #16a34a; font-weight: 600; }

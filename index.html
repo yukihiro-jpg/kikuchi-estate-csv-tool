@@ -8,25 +8,18 @@
 </head>
 <body>
   <header>
-    <h1>通帳CSV 摘要付与ツール</h1>
-    <p class="subtitle">キクチエステート用 / 口座ごとに通帳明細を取り込み・蓄積し、摘要を入力してCSV出力します</p>
+    <div class="header-top">
+      <h1>通帳CSV 摘要付与ツール</h1>
+      <button type="button" id="settings-btn" class="settings-btn">⚙ 設定</button>
+    </div>
+    <div id="account-tabs" class="account-tabs"></div>
   </header>
 
   <main>
-    <!-- 0. 口座を選ぶ -->
+    <!-- 口座情報（選択中のタブの登録内容） -->
     <section id="account-section" class="card">
-      <h2>0. 口座を選ぶ</h2>
-      <div class="account-row">
-        <label class="field inline">
-          口座
-          <select id="account-select"></select>
-        </label>
-        <button type="button" id="account-new" class="btn">＋ 新しい口座を登録</button>
-        <button type="button" id="account-edit" class="btn">口座名を編集</button>
-        <button type="button" id="account-delete" class="btn btn-danger">この口座を削除</button>
-      </div>
-
-      <form id="account-form" class="account-form hidden">
+      <h2 id="account-heading">口座情報</h2>
+      <div class="account-fields">
         <label class="field">
           銀行名
           <input type="text" id="bank-name" placeholder="例）三菱UFJ銀行 ○○支店">
@@ -35,11 +28,12 @@
           口座番号
           <input type="text" id="account-number" placeholder="例）普通 1234567">
         </label>
-        <div class="btn-row">
-          <button type="submit" id="account-save" class="btn btn-primary">保存</button>
-          <button type="button" id="account-cancel" class="btn">キャンセル</button>
-        </div>
-      </form>
+      </div>
+      <div class="btn-row">
+        <button type="button" id="account-save" class="btn btn-primary">保存</button>
+        <button type="button" id="account-cancel" class="btn hidden">キャンセル</button>
+        <button type="button" id="account-delete" class="btn btn-danger">この口座を削除</button>
+      </div>
       <p id="account-status" class="status"></p>
     </section>
 
@@ -92,10 +86,10 @@
       <p id="mapping-status" class="status"></p>
     </section>
 
-    <!-- 2. 明細の確認・摘要入力 -->
+    <!-- 2. 明細の確認・分類入力 -->
     <section id="edit-section" class="card hidden">
-      <h2>2. 明細の確認・摘要の入力</h2>
-      <p class="hint"><span id="row-summary"></span>　黄色の列のセルをクリックして入力できます。不要な行は ✕ で削除できます（保存は自動です）。</p>
+      <h2>2. 明細の確認・分類の入力</h2>
+      <p class="hint"><span id="row-summary"></span>　各行の「分類を編集」から、法人/個人の区分と、入出金の内訳（家賃・ガス代・預り敷金など）を登録できます。入力は自動保存されます。</p>
       <div class="table-wrap">
         <table id="data-table">
           <thead></thead>
@@ -104,23 +98,36 @@
       </div>
     </section>
 
-    <!-- 3. CSV出力 -->
-    <section id="export-section" class="card hidden">
-      <h2>3. CSVを出力する</h2>
-      <label class="field">
-        出力ファイル名
-        <input type="text" id="export-name" value="摘要付き通帳データ.csv">
-      </label>
-      <button id="export-btn" class="btn btn-primary">CSVをダウンロード</button>
-      <p id="export-status" class="status"></p>
-    </section>
+    <!-- 設定パネル（一括ダウンロード・バックアップ） -->
+    <section id="settings-section" class="card hidden">
+      <h2>設定</h2>
 
-    <!-- 4. バックアップと復元 -->
-    <section id="backup-section" class="card">
-      <h2>バックアップと復元</h2>
+      <h3>全口座データの一括ダウンロード</h3>
+      <p class="hint">登録されているすべての口座のデータを、口座ごとのCSVファイルとしてダウンロードします（内訳は1分類につき1行で出力）。期間を指定できます。</p>
+      <div class="range-row">
+        <label class="checkbox">
+          <input type="checkbox" id="all-period" checked>
+          全期間
+        </label>
+        <span id="range-selectors" class="range-selectors">
+          <select id="from-year"></select>年
+          <select id="from-month"></select>月
+          〜
+          <select id="to-year"></select>年
+          <select id="to-month"></select>月
+        </span>
+      </div>
+      <div class="btn-row" style="margin-top:12px;">
+        <button type="button" id="bulk-download-btn" class="btn btn-primary">口座ごとにCSVダウンロード</button>
+      </div>
+      <p id="export-status" class="status"></p>
+
+      <hr class="sep">
+
+      <h3>バックアップと復元</h3>
       <p class="hint">このアプリのデータは、お使いのブラウザの中に保存されています。パソコンの買い替えやブラウザのデータ削除に備えて、ときどきバックアップを保存しておくことをおすすめします。</p>
       <div class="btn-row">
-        <button type="button" id="backup-btn" class="btn btn-primary">バックアップを保存（ファイルに書き出し）</button>
+        <button type="button" id="backup-btn" class="btn">バックアップを保存（ファイルに書き出し）</button>
         <label class="btn">
           バックアップから復元（ファイルを読み込み）
           <input type="file" id="restore-input" accept=".json,application/json" hidden>

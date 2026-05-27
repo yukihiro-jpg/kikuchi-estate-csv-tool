@@ -14,13 +14,14 @@ function loadStore() {
     return { version: 1, accounts: [], selectedAccountId: null };
   }
 }
-
 function saveStore() {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(store));
 }
 
 let store = loadStore();
 let lastImport = null; // 直近に取り込んだ生データ {columns, dataRows, hasHeader}
+let formMode = "edit"; // "edit" | "new"
+const expanded = new Set(); // 分類エディタを開いている行
 
 // マッピングで扱う役割
 const ROLES = [
@@ -31,7 +32,6 @@ const ROLES = [
   { key: "balance", label: "残高" },
   { key: "description", label: "摘要（取引内容）" },
 ];
-
 const GUESS = {
   date: ["日付", "年月日", "取引日", "お取引日"],
   withdrawal: ["出金", "お引出", "引出", "お支払", "支払", "引落", "出金金額"],
@@ -41,16 +41,27 @@ const GUESS = {
   description: ["摘要", "お取引内容", "取引内容", "内容", "明細", "備考", "メモ"],
 };
 
+// 入出金の分類項目
+const CATEGORIES = {
+  入金: ["家賃", "ガス代", "預り敷金", "その他"],
+  出金: ["預り敷金の返済", "家賃の返金", "ガス代の返金", "その他"],
+};
+function categoryOptions(dir) {
+  if (CATEGORIES[dir]) return CATEGORIES[dir];
+  return Array.from(new Set([...CATEGORIES["入金"], ...CATEGORIES["出金"]]));
+}
+
 // ===== DOM =====
 const $ = (id) => document.getElementById(id);
-const accountSelect = $("account-select");
-const accountNewBtn = $("account-new");
-const accountEditBtn = $("account-edit");
-const accountDeleteBtn = $("account-delete");
-const accountForm = $("account-form");
+const accountTabs = $("account-tabs");
+const settingsBtn = $("settings-btn");
+
+const accountHeading = $("account-heading");
 const bankNameInput = $("bank-name");
 const accountNumberInput = $("account-number");
-const accountCancelBtn = $("account-cancel");
+const accountSave = $("account-save");
+const accountCancel = $("account-cancel");
+const accountDelete = $("account-delete");
 const accountStatus = $("account-status");
 
 const importSection = $("import-section");
@@ -73,11 +84,15 @@ const tableHead = document.querySelector("#data-table thead");
 const tableBody = document.querySelector("#data-table tbody");
 const rowSummary = $("row-summary");
 
-const exportSection = $("export-section");
-const exportBtn = $("export-btn");
-const exportName = $("export-name");
+const settingsSection = $("settings-section");
+const allPeriod = $("all-period");
+const rangeSelectors = $("range-selectors");
+const fromYear = $("from-year");
+const fromMonth = $("from-month");
+const toYear = $("to-year");
+const toMonth = $("to-month");
+const bulkDownloadBtn = $("bulk-download-btn");
 const exportStatus = $("export-status");
-
 const backupBtn = $("backup-btn");
 const restoreInput = $("restore-input");
 const backupStatus = $("backup-status");
@@ -87,91 +102,149 @@ function setStatus(el, msg, kind) {
   el.textContent = msg;
   el.className = "status" + (kind ? " " + kind : "");
 }
-
 function getCurrentAccount() {
   return store.accounts.find((a) => a.id === store.selectedAccountId) || null;
 }
-
-// ===== 口座管理 =====
-function renderAccountSelect() {
-  accountSelect.innerHTML = "";
-  if (store.accounts.length === 0) {
-    const opt = document.createElement("option");
-    opt.value = "";
-    opt.textContent = "（口座が未登録です。右の「＋新しい口座を登録」から追加）";
-    accountSelect.appendChild(opt);
-    accountSelect.disabled = true;
-    accountEditBtn.disabled = true;
-    accountDeleteBtn.disabled = true;
-    return;
-  }
-  accountSelect.disabled = false;
-  accountEditBtn.disabled = false;
-  accountDeleteBtn.disabled = false;
-  store.accounts.forEach((a) => {
-    const opt = document.createElement("option");
-    opt.value = a.id;
-    opt.textContent = `${a.bankName}　${a.accountNumber}`.trim();
-    accountSelect.appendChild(opt);
-  });
-  if (!store.selectedAccountId || !getCurrentAccount()) {
-    store.selectedAccountId = store.accounts[0].id;
-  }
-  accountSelect.value = store.selectedAccountId;
+function yen(n) {
+  return "¥" + Number(n || 0).toLocaleString("ja-JP");
 }
 
-let formMode = "new";
+// 金額の文字列を数値へ（△▲・カッコ・＋−・カンマ・¥等に対応）
+function toNumber(str) {
+  if (str == null) return 0;
+  let s = String(str).replace(/[,\s　¥￥円]/g, "");
+  let neg = false;
+  if (/^[△▲]/.test(s) || /^\(.*\)$/.test(s)) { neg = true; s = s.replace(/[△▲()（）]/g, ""); }
+  if (/^-/.test(s)) neg = true;
+  s = s.replace(/^[+\-]/, "");
+  const n = parseFloat(s);
+  if (isNaN(n)) return 0;
+  return neg ? -n : n;
+}
 
-function openAccountForm(mode) {
-  formMode = mode;
+// 役割＋行データから 区分/金額/摘要 を取り出す
+function dirOf(roles, cells) {
+  if (roles.deposit != null && Math.abs(toNumber(cells[roles.deposit])) > 0) return "入金";
+  if (roles.withdrawal != null && Math.abs(toNumber(cells[roles.withdrawal])) > 0) return "出金";
+  if (roles.amount != null) {
+    const v = toNumber(cells[roles.amount]);
+    if (v > 0) return "入金";
+    if (v < 0) return "出金";
+  }
+  return "";
+}
+function amtOf(roles, cells) {
+  if (roles.deposit != null) { const v = Math.abs(toNumber(cells[roles.deposit])); if (v) return v; }
+  if (roles.withdrawal != null) { const v = Math.abs(toNumber(cells[roles.withdrawal])); if (v) return v; }
+  if (roles.amount != null) return Math.abs(toNumber(cells[roles.amount]));
+  return 0;
+}
+function descOf(roles, cells) {
+  return roles.description != null ? String(cells[roles.description] || "") : "";
+}
+
+// ===== 学習（摘要×区分 ごとの内訳） =====
+function learnKey(dir, desc) {
+  return dir + "" + normKey(desc);
+}
+function getLearned(acc, dir, desc) {
+  if (!acc.learn) return null;
+  const d = String(desc || "").trim();
+  if (!d || !dir) return null;
+  return acc.learn[learnKey(dir, desc)] || null;
+}
+function setLearned(acc, dir, desc, entity, items) {
+  const d = String(desc || "").trim();
+  if (!d || !dir) return;
+  if (!acc.learn) acc.learn = {};
+  acc.learn[learnKey(dir, desc)] = {
+    entity: entity || "",
+    items: items.map((it) => ({ category: it.category, amount: it.amount })),
+  };
+}
+
+// ===== 口座タブ =====
+function renderTabs() {
+  accountTabs.innerHTML = "";
+  store.accounts.forEach((a) => {
+    const b = document.createElement("button");
+    b.className = "acc-tab" + (a.id === store.selectedAccountId && formMode !== "new" ? " active" : "");
+    const label = (a.bankName + (a.accountNumber ? "　" + a.accountNumber : "")).trim() || "(無名の口座)";
+    b.textContent = label;
+    b.title = label;
+    b.addEventListener("click", () => {
+      store.selectedAccountId = a.id;
+      formMode = "edit";
+      lastImport = null;
+      expanded.clear();
+      saveStore();
+      setStatus(accountStatus, "", "");
+      setStatus(fileStatus, "", "");
+      renderAll();
+    });
+    accountTabs.appendChild(b);
+  });
+  const add = document.createElement("button");
+  add.className = "acc-tab add" + (formMode === "new" ? " active" : "");
+  add.textContent = "＋ 口座を追加";
+  add.addEventListener("click", () => {
+    formMode = "new";
+    setStatus(accountStatus, "", "");
+    renderAll();
+    bankNameInput.focus();
+  });
+  accountTabs.appendChild(add);
+}
+
+// ===== 口座情報セクション =====
+function renderAccountSection() {
   const acc = getCurrentAccount();
-  if (mode === "edit" && acc) {
-    bankNameInput.value = acc.bankName;
-    accountNumberInput.value = acc.accountNumber;
-  } else {
+  if (formMode === "new" || !acc) {
+    accountHeading.textContent = "新しい口座を登録";
     bankNameInput.value = "";
     accountNumberInput.value = "";
+    accountSave.textContent = "登録";
+    accountCancel.classList.toggle("hidden", store.accounts.length === 0);
+    accountDelete.classList.add("hidden");
+  } else {
+    accountHeading.textContent = "口座情報";
+    bankNameInput.value = acc.bankName;
+    accountNumberInput.value = acc.accountNumber;
+    accountSave.textContent = "保存";
+    accountCancel.classList.add("hidden");
+    accountDelete.classList.remove("hidden");
   }
-  accountForm.classList.remove("hidden");
-  bankNameInput.focus();
 }
 
-function closeAccountForm() {
-  accountForm.classList.add("hidden");
-}
-
-function saveAccount(e) {
-  e.preventDefault();
+function saveAccount() {
   const bankName = bankNameInput.value.trim();
   const accountNumber = accountNumberInput.value.trim();
   if (!bankName) {
     setStatus(accountStatus, "銀行名を入力してください", "error");
     return;
   }
-  if (formMode === "edit") {
-    const acc = getCurrentAccount();
-    if (acc) {
-      acc.bankName = bankName;
-      acc.accountNumber = accountNumber;
-    }
-    setStatus(accountStatus, "口座名を更新しました", "ok");
-  } else {
+  if (formMode === "new") {
     const id = "acc_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
-    store.accounts.push({
-      id,
-      bankName,
-      accountNumber,
-      mapping: null,
-      noteColumn: null,
-      transactions: [],
-    });
+    store.accounts.push({ id, bankName, accountNumber, mapping: null, transactions: [], learn: {} });
     store.selectedAccountId = id;
+    formMode = "edit";
     setStatus(accountStatus, `口座「${bankName}」を登録しました`, "ok");
+  } else {
+    const acc = getCurrentAccount();
+    if (acc) { acc.bankName = bankName; acc.accountNumber = accountNumber; }
+    setStatus(accountStatus, "口座情報を更新しました", "ok");
   }
   saveStore();
-  closeAccountForm();
-  renderAccountSelect();
-  loadAccountView();
+  renderAll();
+}
+
+function cancelAccountForm() {
+  formMode = "edit";
+  if (!getCurrentAccount() && store.accounts.length) {
+    store.selectedAccountId = store.accounts[0].id;
+  }
+  setStatus(accountStatus, "", "");
+  renderAll();
 }
 
 function deleteAccount() {
@@ -183,26 +256,27 @@ function deleteAccount() {
   if (!ok) return;
   store.accounts = store.accounts.filter((a) => a.id !== acc.id);
   store.selectedAccountId = store.accounts.length ? store.accounts[0].id : null;
+  formMode = store.accounts.length ? "edit" : "new";
+  expanded.clear();
   saveStore();
-  renderAccountSelect();
-  loadAccountView();
+  renderAll();
   setStatus(accountStatus, "口座を削除しました", "ok");
 }
 
-// 口座選択時に表示を切り替える
-function loadAccountView() {
+// ===== 表示の切替 =====
+function renderAll() {
+  renderTabs();
+  renderAccountSection();
   const acc = getCurrentAccount();
+  const inNew = formMode === "new" || !acc;
+  importSection.classList.toggle("hidden", inNew);
   mappingSection.classList.add("hidden");
-  if (!acc) {
-    importSection.classList.add("hidden");
+  remapBtn.classList.toggle("hidden", !(acc && acc.mapping && lastImport));
+  if (inNew) {
     editSection.classList.add("hidden");
-    exportSection.classList.add("hidden");
-    return;
+  } else {
+    renderTable();
   }
-  importSection.classList.remove("hidden");
-  remapBtn.classList.toggle("hidden", !(acc.mapping && lastImport));
-  setStatus(fileStatus, "", "");
-  renderTable();
 }
 
 // ===== 文字コード判定付き読込 =====
@@ -217,15 +291,13 @@ function decodeBytes(buffer) {
     return new TextDecoder("shift_jis").decode(bytes);
   }
 }
-
 function handleFile(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const text = decodeBytes(reader.result);
-      const parsed = parseDelimited(text, ",");
-      startImport(parsed);
+      startImport(parseDelimited(text, ","));
     } catch (err) {
       setStatus(fileStatus, "読み込みに失敗しました: " + err.message, "error");
     }
@@ -233,7 +305,6 @@ function handleFile(file) {
   reader.onerror = () => setStatus(fileStatus, "ファイルの読み込みに失敗しました", "error");
   reader.readAsArrayBuffer(file);
 }
-
 function handlePaste() {
   const text = pasteArea.value;
   if (!text.trim()) {
@@ -242,8 +313,7 @@ function handlePaste() {
   }
   try {
     const delimiter = text.includes("\t") ? "\t" : ",";
-    const parsed = parseDelimited(text, delimiter);
-    startImport(parsed);
+    startImport(parseDelimited(text, delimiter));
   } catch (err) {
     setStatus(fileStatus, "取込に失敗しました: " + err.message, "error");
   }
@@ -274,7 +344,6 @@ function parseDelimited(text, delimiter) {
   return records.filter((r) => r.some((v) => v.trim() !== ""));
 }
 
-// パース結果 → {columns, dataRows}
 function splitHeaderAndData(records, headerInFirstRow) {
   if (records.length === 0) throw new Error("データが空です");
   const colCount = records.reduce((m, r) => Math.max(m, r.length), 0);
@@ -291,12 +360,11 @@ function splitHeaderAndData(records, headerInFirstRow) {
     for (let i = 0; i < colCount; i++) columns.push(`列${i + 1}`);
     dataRows = records;
   }
-  // 各行を列数にそろえる
   dataRows = dataRows.map((r) => columns.map((_, i) => (r[i] !== undefined ? r[i] : "")));
   return { columns, dataRows };
 }
 
-// ===== 取込開始：マッピングが必要か判定 =====
+// ===== 取込開始 =====
 function startImport(records) {
   const acc = getCurrentAccount();
   if (!acc) {
@@ -307,36 +375,28 @@ function startImport(records) {
   lastImport = { columns: parsed.columns, dataRows: parsed.dataRows, hasHeader: hasHeader.checked };
 
   if (acc.mapping) {
-    // 学習済み → 自動で取り込む
     const res = mergeIntoAccount(acc, lastImport.dataRows, acc.mapping.roles);
     saveStore();
     renderTable();
     remapBtn.classList.remove("hidden");
-    setStatus(
-      fileStatus,
-      `取り込み完了：新規${res.added}件を追加${res.dup ? `／重複${res.dup}件は除外` : ""}（合計${acc.transactions.length}件）`,
-      "ok"
-    );
+    setStatus(fileStatus, importMessage(res, acc), "ok");
   } else {
-    // 初回 → マッピング設定を表示
     openMapping(guessRoles(lastImport.columns, lastImport.hasHeader));
   }
 }
+function importMessage(res, acc) {
+  return `取り込み完了：新規${res.added}件を追加${res.dup ? `／重複${res.dup}件は除外` : ""}（合計${acc.transactions.length}件）`;
+}
 
-// ヘッダ名から役割を推測（各列は「最も長く一致したキーワード」の役割に割り当てる）
+// ヘッダ名から役割を推測（最長一致で割り当て）
 function guessRoles(columns, headerInFirstRow) {
   const roles = { date: null, withdrawal: null, deposit: null, amount: null, balance: null, description: null };
   if (!headerInFirstRow) return roles;
-  // 列ごとに最有力の役割を求める（例:「入出金」は"出金"より長い"入出金"が勝つ）
   const colBest = columns.map((name) => {
-    let best = null;
-    let bestLen = 0;
+    let best = null, bestLen = 0;
     for (const role of ROLES) {
       for (const k of GUESS[role.key]) {
-        if (name.includes(k) && k.length > bestLen) {
-          best = role.key;
-          bestLen = k.length;
-        }
+        if (name.includes(k) && k.length > bestLen) { best = role.key; bestLen = k.length; }
       }
     }
     return best;
@@ -345,11 +405,7 @@ function guessRoles(columns, headerInFirstRow) {
   ROLES.forEach((role) => {
     for (let i = 0; i < columns.length; i++) {
       if (used.has(i)) continue;
-      if (colBest[i] === role.key) {
-        roles[role.key] = i;
-        used.add(i);
-        break;
-      }
+      if (colBest[i] === role.key) { roles[role.key] = i; used.add(i); break; }
     }
   });
   return roles;
@@ -395,7 +451,6 @@ function openMapping(prefillRoles) {
   mappingSection.classList.remove("hidden");
   mappingSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
-
 function readMappingRoles() {
   const roles = { date: null, withdrawal: null, deposit: null, amount: null, balance: null, description: null };
   mappingFields.querySelectorAll("select").forEach((sel) => {
@@ -403,7 +458,6 @@ function readMappingRoles() {
   });
   return roles;
 }
-
 function applyMapping() {
   const acc = getCurrentAccount();
   if (!acc || !lastImport) return;
@@ -412,82 +466,60 @@ function applyMapping() {
     setStatus(mappingStatus, "「日付」の列を選んでください", "error");
     return;
   }
-  // この口座の列構成と役割を記憶（学習）
   acc.mapping = { hasHeader: lastImport.hasHeader, columns: lastImport.columns.slice(), roles };
-  if (!acc.noteColumn) acc.noteColumn = pickNoteColumn(lastImport.columns);
   const res = mergeIntoAccount(acc, lastImport.dataRows, roles);
   saveStore();
   mappingSection.classList.add("hidden");
   remapBtn.classList.remove("hidden");
   renderTable();
-  setStatus(
-    fileStatus,
-    `取り込み完了：新規${res.added}件を追加${res.dup ? `／重複${res.dup}件は除外` : ""}（合計${acc.transactions.length}件）`,
-    "ok"
-  );
+  setStatus(fileStatus, importMessage(res, acc), "ok");
 }
 
-// 自分が入力する列の名前を決める（既存列と衝突しないように）
-function pickNoteColumn(columns) {
-  let name = columns.includes("摘要") ? "メモ" : "摘要";
-  let n = 2;
-  while (columns.includes(name)) {
-    name = (columns.includes("摘要") ? "メモ" : "摘要") + n;
-    n++;
-  }
-  return name;
-}
-
-// ===== 重複判定キー =====
+// ===== 重複判定 =====
 function normKey(v) {
   return String(v == null ? "" : v).replace(/[,\s　¥￥円]/g, "").trim();
 }
-
 function rowKey(cells, roles) {
   const part = (r) => (r == null ? "" : normKey(cells[r]));
-  return [
-    part(roles.date),
-    part(roles.withdrawal),
-    part(roles.deposit),
-    part(roles.amount),
-    part(roles.balance),
-    part(roles.description),
-  ].join("");
+  return [part(roles.date), part(roles.withdrawal), part(roles.deposit), part(roles.amount), part(roles.balance), part(roles.description)].join("");
 }
 
-// ===== 口座へ取り込み（重複除外） =====
+// ===== 取り込み（重複除外＋学習の事前反映） =====
 function mergeIntoAccount(acc, dataRows, roles) {
   const cols = acc.mapping.columns;
   const existing = new Set(acc.transactions.map((t) => rowKey(t.cells, roles)));
-  let added = 0;
-  let dup = 0;
+  let added = 0, dup = 0;
   dataRows.forEach((row) => {
     const cells = cols.map((_, i) => (row[i] !== undefined ? row[i] : ""));
     const key = rowKey(cells, roles);
     if (existing.has(key)) { dup++; return; }
     existing.add(key);
-    acc.transactions.push({ cells, note: "" });
+    const dir = dirOf(roles, cells);
+    const learned = getLearned(acc, dir, descOf(roles, cells));
+    acc.transactions.push({
+      cells,
+      entity: learned ? learned.entity : "",
+      items: learned ? learned.items.map((it) => ({ category: it.category, amount: it.amount })) : [],
+    });
     added++;
   });
   return { added, dup };
 }
 
-// ===== テーブル描画（保存済み明細） =====
+// ===== テーブル描画 =====
 function renderTable() {
   const acc = getCurrentAccount();
   if (!acc || !acc.mapping || acc.transactions.length === 0) {
     editSection.classList.add("hidden");
-    exportSection.classList.add("hidden");
     if (acc) rowSummary.textContent = "";
     return;
   }
   editSection.classList.remove("hidden");
-  exportSection.classList.remove("hidden");
-
   const cols = acc.mapping.columns;
-  const noteCol = acc.noteColumn;
+  const roles = acc.mapping.roles;
   rowSummary.textContent = `保存済み：${acc.transactions.length}件`;
 
+  // ヘッダ
   tableHead.innerHTML = "";
   const headRow = document.createElement("tr");
   cols.forEach((h) => {
@@ -495,31 +527,27 @@ function renderTable() {
     th.textContent = h;
     headRow.appendChild(th);
   });
-  const thNote = document.createElement("th");
-  thNote.textContent = noteCol;
-  thNote.classList.add("col-tekiyo");
-  headRow.appendChild(thNote);
-  const thDel = document.createElement("th");
-  headRow.appendChild(thDel);
+  const thCat = document.createElement("th");
+  thCat.textContent = "区分・分類";
+  thCat.classList.add("col-tekiyo");
+  headRow.appendChild(thCat);
+  headRow.appendChild(document.createElement("th"));
   tableHead.appendChild(headRow);
 
+  // 本体
   tableBody.innerHTML = "";
   acc.transactions.forEach((tx, rowIndex) => {
+    if (!tx.items) tx.items = [];
+    if (tx.entity == null) tx.entity = "";
+    const dir = dirOf(roles, tx.cells);
+
     const tr = document.createElement("tr");
     cols.forEach((h, i) => {
       const td = document.createElement("td");
       td.textContent = tx.cells[i] !== undefined ? tx.cells[i] : "";
       tr.appendChild(td);
     });
-    const tdNote = document.createElement("td");
-    tdNote.classList.add("col-tekiyo");
-    tdNote.setAttribute("contenteditable", "true");
-    tdNote.textContent = tx.note || "";
-    tdNote.addEventListener("input", () => {
-      acc.transactions[rowIndex].note = tdNote.textContent;
-      saveStore();
-    });
-    tr.appendChild(tdNote);
+    tr.appendChild(buildSummaryCell(acc, tx, rowIndex, dir));
 
     const tdDel = document.createElement("td");
     const delBtn = document.createElement("button");
@@ -528,54 +556,274 @@ function renderTable() {
     delBtn.title = "この行を削除";
     delBtn.addEventListener("click", () => {
       acc.transactions.splice(rowIndex, 1);
+      expanded.clear();
       saveStore();
       renderTable();
     });
     tdDel.appendChild(delBtn);
     tr.appendChild(tdDel);
     tableBody.appendChild(tr);
+
+    if (expanded.has(rowIndex)) {
+      tableBody.appendChild(buildEditorRow(acc, tx, rowIndex, dir, cols.length + 2));
+    }
   });
 }
 
-// ===== CSV出力 =====
+function buildSummaryCell(acc, tx, rowIndex, dir) {
+  const td = document.createElement("td");
+  td.className = "col-tekiyo col-cat";
+  const wrap = document.createElement("div");
+  wrap.className = "cat-summary";
+
+  const badge = document.createElement("span");
+  badge.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
+  badge.textContent = dir || "区分不明";
+  wrap.appendChild(badge);
+  wrap.appendChild(document.createTextNode(" "));
+
+  if (tx.entity) {
+    const ent = document.createElement("span");
+    ent.className = "entity";
+    ent.textContent = tx.entity;
+    wrap.appendChild(ent);
+  }
+  if (tx.items && tx.items.length) {
+    const txt = tx.items.map((it) => `${it.category || "（未選択）"} ${yen(toNumber(it.amount))}`).join(" ／ ");
+    wrap.appendChild(document.createTextNode(txt));
+  } else {
+    const e = document.createElement("span");
+    e.className = "empty";
+    e.textContent = "（未分類）";
+    wrap.appendChild(e);
+  }
+
+  const mm = mismatchInfo(acc, tx, dir);
+  if (mm) {
+    const m = document.createElement("span");
+    m.className = "mismatch";
+    m.textContent = mm;
+    wrap.appendChild(m);
+  }
+
+  td.appendChild(wrap);
+  const btn = document.createElement("button");
+  btn.className = "edit-cat-btn";
+  btn.textContent = expanded.has(rowIndex) ? "閉じる" : "分類を編集";
+  btn.addEventListener("click", () => {
+    if (expanded.has(rowIndex)) expanded.delete(rowIndex);
+    else expanded.add(rowIndex);
+    renderTable();
+  });
+  td.appendChild(btn);
+  return td;
+}
+
+function mismatchInfo(acc, tx, dir) {
+  if (!tx.items || tx.items.length === 0) return "";
+  const itemsTotal = tx.items.reduce((s, it) => s + toNumber(it.amount), 0);
+  const amt = amtOf(acc.mapping.roles, tx.cells);
+  if (itemsTotal !== amt) {
+    return `金額が一致しません（取引 ${yen(amt)} ／ 内訳合計 ${yen(itemsTotal)}）`;
+  }
+  return "";
+}
+
+function buildEditorRow(acc, tx, rowIndex, dir, colspan) {
+  const tr = document.createElement("tr");
+  tr.className = "cat-editor";
+  const td = document.createElement("td");
+  td.colSpan = colspan;
+  const inner = document.createElement("div");
+  inner.className = "cat-editor-inner";
+
+  // 区分（法人/個人）
+  const entityRow = document.createElement("div");
+  entityRow.className = "entity-row";
+  const entLabel = document.createElement("strong");
+  entLabel.textContent = "区分：";
+  entityRow.appendChild(entLabel);
+  ["法人", "個人"].forEach((v) => {
+    const lab = document.createElement("label");
+    const rb = document.createElement("input");
+    rb.type = "radio";
+    rb.name = "entity_" + rowIndex;
+    rb.value = v;
+    rb.checked = tx.entity === v;
+    rb.addEventListener("change", () => {
+      tx.entity = v;
+      learnFromTx(acc, tx, dir);
+      saveStore();
+    });
+    lab.appendChild(rb);
+    lab.appendChild(document.createTextNode(v));
+    entityRow.appendChild(lab);
+  });
+  const dirInfo = document.createElement("span");
+  dirInfo.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
+  dirInfo.textContent = dir ? dir + "の内訳" : "区分不明（入金/出金が判別できません）";
+  entityRow.appendChild(dirInfo);
+  inner.appendChild(entityRow);
+
+  // 内訳テーブル
+  const itemsTable = document.createElement("table");
+  itemsTable.className = "items-table";
+  const itemsBody = document.createElement("tbody");
+  itemsTable.appendChild(itemsBody);
+  inner.appendChild(itemsTable);
+
+  const totalEl = document.createElement("div");
+  totalEl.className = "editor-total";
+
+  function refreshTotals() {
+    const itemsTotal = tx.items.reduce((s, it) => s + toNumber(it.amount), 0);
+    const amt = amtOf(acc.mapping.roles, tx.cells);
+    const ok = itemsTotal === amt;
+    totalEl.innerHTML = "";
+    totalEl.appendChild(document.createTextNode(`取引金額 ${yen(amt)} ／ 内訳合計 `));
+    const span = document.createElement("span");
+    span.className = ok ? "ok" : "ng";
+    span.textContent = yen(itemsTotal) + (ok ? "（一致）" : "（不一致）");
+    totalEl.appendChild(span);
+  }
+
+  function renderItems() {
+    itemsBody.innerHTML = "";
+    tx.items.forEach((it, idx) => {
+      const row = document.createElement("tr");
+
+      const tdCat = document.createElement("td");
+      const sel = document.createElement("select");
+      const blank = document.createElement("option");
+      blank.value = "";
+      blank.textContent = "（分類を選択）";
+      sel.appendChild(blank);
+      categoryOptions(dir).forEach((c) => {
+        const o = document.createElement("option");
+        o.value = c;
+        o.textContent = c;
+        sel.appendChild(o);
+      });
+      sel.value = it.category || "";
+      sel.addEventListener("change", () => {
+        it.category = sel.value;
+        learnFromTx(acc, tx, dir);
+        saveStore();
+      });
+      tdCat.appendChild(sel);
+      row.appendChild(tdCat);
+
+      const tdAmt = document.createElement("td");
+      const inp = document.createElement("input");
+      inp.type = "text";
+      inp.inputMode = "numeric";
+      inp.placeholder = "金額";
+      inp.value = it.amount || "";
+      inp.addEventListener("input", () => {
+        it.amount = inp.value;
+        refreshTotals();
+        learnFromTx(acc, tx, dir);
+        saveStore();
+      });
+      tdAmt.appendChild(inp);
+      row.appendChild(tdAmt);
+
+      const tdRm = document.createElement("td");
+      const rm = document.createElement("button");
+      rm.className = "del-btn";
+      rm.textContent = "✕";
+      rm.title = "この内訳を削除";
+      rm.addEventListener("click", () => {
+        tx.items.splice(idx, 1);
+        learnFromTx(acc, tx, dir);
+        saveStore();
+        renderItems();
+        refreshTotals();
+      });
+      tdRm.appendChild(rm);
+      row.appendChild(tdRm);
+
+      itemsBody.appendChild(row);
+    });
+  }
+
+  renderItems();
+  refreshTotals();
+
+  const addBtn = document.createElement("button");
+  addBtn.className = "add-item-btn";
+  addBtn.textContent = "＋ 内訳の行を追加";
+  addBtn.addEventListener("click", () => {
+    // 最初の1行は取引金額を初期値に
+    const init = tx.items.length === 0 ? String(amtOf(acc.mapping.roles, tx.cells) || "") : "";
+    tx.items.push({ category: "", amount: init });
+    learnFromTx(acc, tx, dir);
+    saveStore();
+    renderItems();
+    refreshTotals();
+  });
+  inner.appendChild(addBtn);
+  inner.appendChild(totalEl);
+
+  const closeBtn = document.createElement("button");
+  closeBtn.className = "btn";
+  closeBtn.style.marginLeft = "10px";
+  closeBtn.textContent = "閉じる";
+  closeBtn.addEventListener("click", () => {
+    expanded.delete(rowIndex);
+    renderTable();
+  });
+  inner.appendChild(closeBtn);
+
+  td.appendChild(inner);
+  tr.appendChild(td);
+  return tr;
+}
+
+function learnFromTx(acc, tx, dir) {
+  setLearned(acc, dir, descOf(acc.mapping.roles, tx.cells), tx.entity, tx.items);
+}
+
+// ===== CSV出力（一括・口座ごと） =====
 function escapeField(value) {
   const v = value == null ? "" : String(value);
   if (/[",\n]/.test(v)) return '"' + v.replace(/"/g, '""') + '"';
   return v;
 }
-
-function buildCSV(acc) {
-  const cols = acc.mapping.columns;
-  const noteCol = acc.noteColumn;
-  const headers = cols.concat([noteCol]);
+function parseYearMonth(s) {
+  const m = String(s || "").match(/(\d{4})\s*[\/\-\.年]\s*(\d{1,2})/);
+  if (m) return { y: +m[1], m: +m[2] };
+  return null;
+}
+function buildCategorizedCSV(acc, fromYM, toYM) {
+  const roles = acc.mapping.roles;
+  const headers = ["銀行名", "口座番号", "日付", "区分", "摘要", "取引金額", "残高", "法人/個人", "分類", "金額"];
   const lines = [headers.map(escapeField).join(",")];
   acc.transactions.forEach((tx) => {
-    const row = cols.map((_, i) => escapeField(tx.cells[i]));
-    row.push(escapeField(tx.note));
-    lines.push(row.join(","));
+    const dateCell = roles.date != null ? String(tx.cells[roles.date] || "") : "";
+    if (fromYM != null && toYM != null) {
+      const ym = parseYearMonth(dateCell);
+      if (ym) {
+        const n = ym.y * 100 + ym.m;
+        if (n < fromYM || n > toYM) return;
+      }
+    }
+    const dir = dirOf(roles, tx.cells);
+    const amt = amtOf(roles, tx.cells);
+    const desc = descOf(roles, tx.cells);
+    const bal = roles.balance != null ? String(tx.cells[roles.balance] || "") : "";
+    const common = [acc.bankName, acc.accountNumber, dateCell, dir, desc, String(amt), bal, tx.entity || ""];
+    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "" }];
+    items.forEach((it) => {
+      const row = common.concat([it.category || "", it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount))]);
+      lines.push(row.map(escapeField).join(","));
+    });
   });
   return lines.join("\r\n");
 }
-
-function exportCSV() {
-  const acc = getCurrentAccount();
-  if (!acc || !acc.mapping || acc.transactions.length === 0) {
-    setStatus(exportStatus, "出力するデータがありません", "error");
-    return;
-  }
-  const csv = buildCSV(acc);
-  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
-  const blob = new Blob([bom, csv], { type: "text/csv;charset=utf-8" });
-  triggerDownload(blob, ensureExt(exportName.value || "出力.csv", ".csv"));
-  setStatus(exportStatus, `出力しました（${acc.transactions.length}件）`, "ok");
+function sanitizeName(s) {
+  return String(s || "").replace(/[\\\/:*?"<>|]/g, "_").trim();
 }
-
-function ensureExt(name, ext) {
-  name = name.trim();
-  if (!name.toLowerCase().endsWith(ext)) name += ext;
-  return name;
-}
-
 function triggerDownload(blob, filename) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -586,6 +834,34 @@ function triggerDownload(blob, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
+function downloadAccountCSV(acc, fromYM, toYM, suffix) {
+  const csv = buildCategorizedCSV(acc, fromYM, toYM);
+  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
+  const blob = new Blob([bom, csv], { type: "text/csv;charset=utf-8" });
+  const base = sanitizeName(acc.bankName + (acc.accountNumber ? "_" + acc.accountNumber : ""));
+  triggerDownload(blob, `${base}_${suffix}.csv`);
+}
+function bulkDownload() {
+  const targets = store.accounts.filter((a) => a.mapping && a.transactions.length);
+  if (targets.length === 0) {
+    setStatus(exportStatus, "出力できるデータがありません", "error");
+    return;
+  }
+  let fromYM = null, toYM = null, suffix = "全期間";
+  if (!allPeriod.checked) {
+    fromYM = +fromYear.value * 100 + +fromMonth.value;
+    toYM = +toYear.value * 100 + +toMonth.value;
+    if (fromYM > toYM) {
+      setStatus(exportStatus, "期間の指定が逆になっています（開始＜終了にしてください）", "error");
+      return;
+    }
+    suffix = `${fromYear.value}-${String(fromMonth.value).padStart(2, "0")}_${toYear.value}-${String(toMonth.value).padStart(2, "0")}`;
+  }
+  targets.forEach((acc, i) => {
+    setTimeout(() => downloadAccountCSV(acc, fromYM, toYM, suffix), i * 400);
+  });
+  setStatus(exportStatus, `${targets.length}口座分のCSVをダウンロードします（ブラウザが複数ファイルの許可を求めたら「許可」してください）`, "ok");
+}
 
 // ===== バックアップ／復元 =====
 function backupData() {
@@ -595,28 +871,22 @@ function backupData() {
   triggerDownload(blob, `通帳ツール_バックアップ_${today}.json`);
   setStatus(backupStatus, "バックアップを保存しました", "ok");
 }
-
 function restoreData(file) {
   if (!file) return;
   const reader = new FileReader();
   reader.onload = () => {
     try {
       const obj = JSON.parse(reader.result);
-      if (!obj || !Array.isArray(obj.accounts)) {
-        throw new Error("バックアップファイルの形式が正しくありません");
-      }
-      const ok = confirm(
-        "現在のデータをバックアップの内容で置き換えます。今のデータは消えます。よろしいですか？（必要なら先に「バックアップを保存」してください）"
-      );
+      if (!obj || !Array.isArray(obj.accounts)) throw new Error("バックアップファイルの形式が正しくありません");
+      const ok = confirm("現在のデータをバックアップの内容で置き換えます。今のデータは消えます。よろしいですか？（必要なら先に「バックアップを保存」してください）");
       if (!ok) return;
       store = obj;
-      if (!store.selectedAccountId && store.accounts.length) {
-        store.selectedAccountId = store.accounts[0].id;
-      }
-      saveStore();
+      if (!store.selectedAccountId && store.accounts.length) store.selectedAccountId = store.accounts[0].id;
+      formMode = store.accounts.length ? "edit" : "new";
       lastImport = null;
-      renderAccountSelect();
-      loadAccountView();
+      expanded.clear();
+      saveStore();
+      renderAll();
       setStatus(backupStatus, `復元しました（口座${store.accounts.length}件）`, "ok");
     } catch (err) {
       setStatus(backupStatus, "復元に失敗しました: " + err.message, "error");
@@ -626,19 +896,46 @@ function restoreData(file) {
   reader.readAsText(file);
 }
 
+// ===== 期間セレクタの初期化 =====
+function populateRange() {
+  const now = new Date();
+  const thisYear = now.getFullYear();
+  for (let y = thisYear + 1; y >= 2015; y--) {
+    [fromYear, toYear].forEach((sel) => {
+      const o = document.createElement("option");
+      o.value = String(y);
+      o.textContent = String(y);
+      sel.appendChild(o);
+    });
+  }
+  for (let m = 1; m <= 12; m++) {
+    [fromMonth, toMonth].forEach((sel) => {
+      const o = document.createElement("option");
+      o.value = String(m);
+      o.textContent = String(m);
+      sel.appendChild(o);
+    });
+  }
+  fromYear.value = String(thisYear);
+  fromMonth.value = "1";
+  toYear.value = String(thisYear);
+  toMonth.value = "12";
+  syncRange();
+}
+function syncRange() {
+  rangeSelectors.classList.toggle("disabled", allPeriod.checked);
+}
+
 // ===== イベント登録 =====
-accountSelect.addEventListener("change", () => {
-  store.selectedAccountId = accountSelect.value;
-  saveStore();
-  lastImport = null;
-  remapBtn.classList.add("hidden");
-  loadAccountView();
+settingsBtn.addEventListener("click", () => {
+  const willShow = settingsSection.classList.contains("hidden");
+  settingsSection.classList.toggle("hidden");
+  if (willShow) settingsSection.scrollIntoView({ behavior: "smooth" });
 });
-accountNewBtn.addEventListener("click", () => openAccountForm("new"));
-accountEditBtn.addEventListener("click", () => openAccountForm("edit"));
-accountDeleteBtn.addEventListener("click", deleteAccount);
-accountForm.addEventListener("submit", saveAccount);
-accountCancelBtn.addEventListener("click", closeAccountForm);
+
+accountSave.addEventListener("click", saveAccount);
+accountCancel.addEventListener("click", cancelAccountForm);
+accountDelete.addEventListener("click", deleteAccount);
 
 fileInput.addEventListener("change", (e) => handleFile(e.target.files[0]));
 dropzone.addEventListener("dragover", (e) => { e.preventDefault(); dropzone.classList.add("dragover"); });
@@ -660,11 +957,11 @@ mappingCancel.addEventListener("click", () => {
   setStatus(fileStatus, "取り込みを中止しました", "");
 });
 
-exportBtn.addEventListener("click", exportCSV);
+allPeriod.addEventListener("change", syncRange);
+bulkDownloadBtn.addEventListener("click", bulkDownload);
 backupBtn.addEventListener("click", backupData);
 restoreInput.addEventListener("change", (e) => restoreData(e.target.files[0]));
 
-// タブ切替
 document.querySelectorAll(".tab").forEach((tab) => {
   tab.addEventListener("click", () => {
     document.querySelectorAll(".tab").forEach((t) => t.classList.remove("active"));
@@ -676,5 +973,11 @@ document.querySelectorAll(".tab").forEach((tab) => {
 });
 
 // ===== 初期化 =====
-renderAccountSelect();
-loadAccountView();
+if (store.accounts.length === 0) {
+  formMode = "new";
+} else {
+  formMode = "edit";
+  if (!getCurrentAccount()) store.selectedAccountId = store.accounts[0].id;
+}
+populateRange();
+renderAll();
