@@ -203,12 +203,13 @@ function getLearned(acc, dir, desc) {
   if (!d || !dir) return null;
   return acc.learn[learnKey(dir, desc)] || null;
 }
-function setLearned(acc, dir, desc, entity, items) {
+function setLearned(acc, dir, desc, entity, property, items) {
   const d = String(desc || "").trim();
   if (!d || !dir) return;
   if (!acc.learn) acc.learn = {};
   acc.learn[learnKey(dir, desc)] = {
     entity: entity || "",
+    property: property || "",
     items: items.map((it) => ({ category: it.category, amount: it.amount })),
   };
 }
@@ -701,6 +702,8 @@ function mergeIntoAccount(acc, dataRows, roles) {
     acc.transactions.push({
       cells,
       entity: learned ? learned.entity : "",
+      property: learned ? learned.property || "" : "",
+      memo: "",
       items: learned ? learned.items.map((it) => ({ category: it.category, amount: it.amount })) : [],
     });
     added++;
@@ -777,23 +780,21 @@ function renderTable() {
   });
 }
 
-// 分類セル：法人/個人の選択と、分類ごとの金額・メモ欄を常に表示
-function getItemField(tx, category, field) {
+// 分類セル：法人/個人の選択と、分類ごとの金額欄を常に表示
+function getItemAmount(tx, category) {
   const it = (tx.items || []).find((i) => i.category === category);
-  return it && it[field] != null ? String(it[field]) : "";
+  return it && it.amount != null ? String(it.amount) : "";
 }
-function setItemField(tx, category, field, value) {
+function setItemAmount(tx, category, value) {
   if (!tx.items) tx.items = [];
-  let it = tx.items.find((i) => i.category === category);
-  if (!it) {
-    if (value === "" || value == null) return;
-    it = { category, amount: "", memo: "" };
-    tx.items.push(it);
+  const idx = tx.items.findIndex((i) => i.category === category);
+  if (value === "" || value == null) {
+    if (idx >= 0) tx.items.splice(idx, 1);
+  } else if (idx >= 0) {
+    tx.items[idx].amount = value;
+  } else {
+    tx.items.push({ category, amount: value });
   }
-  it[field] = value;
-  const emptyAmt = !it.amount || String(it.amount).trim() === "";
-  const emptyMemo = !it.memo || String(it.memo).trim() === "";
-  if (emptyAmt && emptyMemo) tx.items = tx.items.filter((i) => i !== it);
 }
 
 function buildDetailInner(acc, tx, rowIndex, dir) {
@@ -825,78 +826,100 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
   });
   inner.appendChild(entWrap);
 
-  if (!dir) {
+  // 物件名（入金・出金共通・1取引に1つ）
+  inner.appendChild(
+    buildTxField("物件名", "property-field", "物件名を入力", tx.property || "", (val) => {
+      tx.property = val;
+      learnFromTx(acc, tx, dir);
+      saveStore();
+    })
+  );
+
+  if (dir) {
+    const totalEl = document.createElement("span");
+    totalEl.className = "cat-total";
+    function refreshTotal() {
+      const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
+      const amt = amtOf(acc.mapping.roles, tx.cells);
+      const diff = amt - itemsTotal;
+      totalEl.innerHTML = "";
+      totalEl.appendChild(document.createTextNode(`取引 ${yen(amt)}　入力 ${yen(itemsTotal)}　差額 `));
+      const span = document.createElement("span");
+      span.className = diff === 0 ? "ok" : "ng";
+      span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
+      totalEl.appendChild(span);
+    }
+
+    // 分類ごとの金額欄を横に並べて常に表示
+    categoriesForTx(dir, tx).forEach((cat) => {
+      const item = document.createElement("div");
+      item.className = "cat-item";
+      const name = document.createElement("span");
+      name.className = "cat-name";
+      name.textContent = cat;
+      item.appendChild(name);
+
+      const amtInp = document.createElement("input");
+      amtInp.type = "text";
+      amtInp.inputMode = "numeric";
+      amtInp.placeholder = "0";
+      amtInp.value = getItemAmount(tx, cat);
+      amtInp.addEventListener("input", () => {
+        setItemAmount(tx, cat, amtInp.value.trim());
+        refreshTotal();
+        learnFromTx(acc, tx, dir);
+        saveStore();
+      });
+      const field = document.createElement("div");
+      field.className = "amount-field";
+      const yenMark = document.createElement("span");
+      yenMark.className = "yen";
+      yenMark.textContent = "¥";
+      field.appendChild(yenMark);
+      field.appendChild(amtInp);
+      item.appendChild(field);
+
+      inner.appendChild(item);
+    });
+
+    refreshTotal();
+    inner.appendChild(totalEl);
+  } else {
     const note = document.createElement("span");
     note.className = "empty";
     note.textContent = "入金/出金が判別できないため内訳を入力できません";
     inner.appendChild(note);
-    return inner;
   }
 
-  const totalEl = document.createElement("span");
-  totalEl.className = "cat-total";
-  function refreshTotal() {
-    const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
-    const amt = amtOf(acc.mapping.roles, tx.cells);
-    const diff = amt - itemsTotal;
-    totalEl.innerHTML = "";
-    totalEl.appendChild(document.createTextNode(`取引 ${yen(amt)}　入力 ${yen(itemsTotal)}　差額 `));
-    const span = document.createElement("span");
-    span.className = diff === 0 ? "ok" : "ng";
-    span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
-    totalEl.appendChild(span);
-  }
-
-  // 分類ごとの金額・メモ欄を横に並べて常に表示
-  categoriesForTx(dir, tx).forEach((cat) => {
-    const item = document.createElement("div");
-    item.className = "cat-item";
-    const name = document.createElement("span");
-    name.className = "cat-name";
-    name.textContent = cat;
-    item.appendChild(name);
-
-    const amtInp = document.createElement("input");
-    amtInp.type = "text";
-    amtInp.inputMode = "numeric";
-    amtInp.placeholder = "0";
-    amtInp.value = getItemField(tx, cat, "amount");
-    amtInp.addEventListener("input", () => {
-      setItemField(tx, cat, "amount", amtInp.value.trim());
-      refreshTotal();
-      learnFromTx(acc, tx, dir);
+  // メモ（1取引に1つ）
+  inner.appendChild(
+    buildTxField("メモ", "memo-field", "メモを入力", tx.memo || "", (val) => {
+      tx.memo = val;
       saveStore();
-    });
-    const field = document.createElement("div");
-    field.className = "amount-field";
-    const yenMark = document.createElement("span");
-    yenMark.className = "yen";
-    yenMark.textContent = "¥";
-    field.appendChild(yenMark);
-    field.appendChild(amtInp);
-    item.appendChild(field);
+    })
+  );
 
-    const memoInp = document.createElement("input");
-    memoInp.type = "text";
-    memoInp.className = "cat-memo";
-    memoInp.placeholder = "メモ";
-    memoInp.value = getItemField(tx, cat, "memo");
-    memoInp.addEventListener("input", () => {
-      setItemField(tx, cat, "memo", memoInp.value);
-      saveStore();
-    });
-    item.appendChild(memoInp);
-
-    inner.appendChild(item);
-  });
-
-  refreshTotal();
-  inner.appendChild(totalEl);
   return inner;
 }
 
+function buildTxField(label, cls, placeholder, value, onInput) {
+  const wrap = document.createElement("div");
+  wrap.className = "tx-field " + cls;
+  const lab = document.createElement("span");
+  lab.className = "tx-field-label";
+  lab.textContent = label;
+  wrap.appendChild(lab);
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.placeholder = placeholder;
+  inp.value = value;
+  inp.addEventListener("input", () => onInput(inp.value));
+  wrap.appendChild(inp);
+  return wrap;
+}
+
 function learnFromTx(acc, tx, dir) {
-  setLearned(acc, dir, descOf(acc.mapping.roles, tx.cells), tx.entity, tx.items);
+  setLearned(acc, dir, descOf(acc.mapping.roles, tx.cells), tx.entity, tx.property, tx.items);
 }
 
 // ===== CSV出力（一括・口座ごと） =====
@@ -912,7 +935,7 @@ function parseYearMonth(s) {
 }
 function buildCategorizedCSV(acc, fromYM, toYM) {
   const roles = acc.mapping.roles;
-  const headers = ["銀行名", "口座番号", "日付", "区分", "摘要", "取引金額", "残高", "法人/個人", "分類", "金額", "メモ"];
+  const headers = ["銀行名", "口座番号", "日付", "区分", "摘要", "取引金額", "残高", "法人/個人", "物件名", "分類", "金額", "メモ"];
   const lines = [headers.map(escapeField).join(",")];
   acc.transactions.forEach((tx) => {
     const dateCell = roles.date != null ? String(tx.cells[roles.date] || "") : "";
@@ -927,13 +950,13 @@ function buildCategorizedCSV(acc, fromYM, toYM) {
     const amt = amtOf(roles, tx.cells);
     const desc = descOf(roles, tx.cells);
     const bal = roles.balance != null ? String(tx.cells[roles.balance] || "") : "";
-    const common = [acc.bankName, acc.accountNumber, dateCell, dir, desc, String(amt), bal, tx.entity || ""];
-    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "", memo: "" }];
+    const common = [acc.bankName, acc.accountNumber, dateCell, dir, desc, String(amt), bal, tx.entity || "", tx.property || ""];
+    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "" }];
     items.forEach((it) => {
       const row = common.concat([
         it.category || "",
         it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount)),
-        it.memo || "",
+        tx.memo || "",
       ]);
       lines.push(row.map(escapeField).join(","));
     });
