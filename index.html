@@ -44,19 +44,19 @@
       <h2>1. 通帳データを取り込む</h2>
 
       <div class="tabs">
-        <button type="button" class="tab active" data-tab="file">CSVファイルから</button>
+        <button type="button" class="tab active" data-tab="file">CSV・Excelファイルから</button>
         <button type="button" class="tab" data-tab="paste">コピー＆貼り付けから</button>
       </div>
 
       <div id="tab-file" class="tab-panel">
         <div id="dropzone" class="dropzone">
-          <p>ここにCSVファイルをドラッグ＆ドロップ</p>
+          <p>ここにCSV・Excel(.xlsx)ファイルをドラッグ＆ドロップ</p>
           <p>または</p>
           <label class="btn">
             ファイルを選択
-            <input type="file" id="file-input" accept=".csv,text/csv" hidden>
+            <input type="file" id="file-input" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
           </label>
-          <p class="hint">Shift-JIS / UTF-8 どちらの文字コードでも読み込めます</p>
+          <p class="hint">CSV（Shift-JIS / UTF-8）と Excel（.xlsx）に対応しています</p>
         </div>
       </div>
 

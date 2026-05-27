@@ -417,16 +417,159 @@ function decodeBytes(buffer) {
 function handleFile(file) {
   if (!file) return;
   const reader = new FileReader();
-  reader.onload = () => {
+  reader.onload = async () => {
     try {
-      const text = decodeBytes(reader.result);
-      startImport(parseDelimited(text, ","));
+      const buf = reader.result;
+      const bytes = new Uint8Array(buf);
+      // 旧形式 .xls（バイナリ）は非対応
+      if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) {
+        setStatus(fileStatus, "古いExcel形式(.xls)は読み込めません。Excelで「.xlsx」または「CSV」として保存し直してください。", "error");
+        return;
+      }
+      const isZip = bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
+      const isXlsxName = /\.xlsx$/i.test(file.name || "");
+      if (isZip || isXlsxName) {
+        const records = await parseXlsx(buf);
+        startImport(records);
+      } else {
+        startImport(parseDelimited(decodeBytes(buf), ","));
+      }
     } catch (err) {
       setStatus(fileStatus, "読み込みに失敗しました: " + err.message, "error");
     }
   };
   reader.onerror = () => setStatus(fileStatus, "ファイルの読み込みに失敗しました", "error");
   reader.readAsArrayBuffer(file);
+}
+
+// ===== Excel(.xlsx) の読み込み =====
+async function parseXlsx(buf) {
+  const entries = readZipEntries(buf);
+  let sheetEntryName = null;
+  for (const name of entries.keys()) {
+    if (/^xl\/worksheets\/sheet\d+\.xml$/i.test(name)) {
+      if (!sheetEntryName || name < sheetEntryName) sheetEntryName = name;
+    }
+  }
+  if (!sheetEntryName) throw new Error("Excelのシートが見つかりませんでした");
+  const sheetXml = await readZipEntryText(buf, entries.get(sheetEntryName));
+  let shared = [];
+  if (entries.has("xl/sharedStrings.xml")) {
+    shared = parseSharedStrings(await readZipEntryText(buf, entries.get("xl/sharedStrings.xml")));
+  }
+  return parseSheetXml(sheetXml, shared);
+}
+
+function readZipEntries(buf) {
+  const view = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  const len = bytes.length;
+  let eocd = -1;
+  for (let i = len - 22; i >= 0 && i >= len - 22 - 65536; i--) {
+    if (view.getUint32(i, true) === 0x06054b50) { eocd = i; break; }
+  }
+  if (eocd < 0) throw new Error("Excelファイルの形式を確認できませんでした");
+  const count = view.getUint16(eocd + 10, true);
+  let off = view.getUint32(eocd + 16, true);
+  const entries = new Map();
+  const dec = new TextDecoder("utf-8");
+  for (let e = 0; e < count; e++) {
+    if (view.getUint32(off, true) !== 0x02014b50) break;
+    const method = view.getUint16(off + 10, true);
+    const compSize = view.getUint32(off + 20, true);
+    const nameLen = view.getUint16(off + 28, true);
+    const extraLen = view.getUint16(off + 30, true);
+    const commentLen = view.getUint16(off + 32, true);
+    const localOff = view.getUint32(off + 42, true);
+    const name = dec.decode(bytes.subarray(off + 46, off + 46 + nameLen));
+    entries.set(name, { method, compSize, localOff });
+    off += 46 + nameLen + extraLen + commentLen;
+  }
+  return entries;
+}
+
+async function readZipEntryText(buf, entry) {
+  const view = new DataView(buf);
+  const bytes = new Uint8Array(buf);
+  const lnLen = view.getUint16(entry.localOff + 26, true);
+  const leLen = view.getUint16(entry.localOff + 28, true);
+  const dataStart = entry.localOff + 30 + lnLen + leLen;
+  const comp = bytes.subarray(dataStart, dataStart + entry.compSize);
+  let raw;
+  if (entry.method === 0) {
+    raw = comp;
+  } else if (entry.method === 8) {
+    if (typeof DecompressionStream === "undefined") {
+      throw new Error("このブラウザはExcelの展開に対応していません（最新のChrome/Edgeをご利用ください）");
+    }
+    const stream = new Blob([comp]).stream().pipeThrough(new DecompressionStream("deflate-raw"));
+    raw = new Uint8Array(await new Response(stream).arrayBuffer());
+  } else {
+    throw new Error("未対応の圧縮方式です (" + entry.method + ")");
+  }
+  return new TextDecoder("utf-8").decode(raw);
+}
+
+function parseSharedStrings(xml) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const sis = doc.getElementsByTagName("si");
+  const out = [];
+  for (let i = 0; i < sis.length; i++) {
+    const ts = sis[i].getElementsByTagName("t");
+    let s = "";
+    for (let j = 0; j < ts.length; j++) s += ts[j].textContent;
+    out.push(s);
+  }
+  return out;
+}
+
+function colRefToIndex(ref) {
+  const m = String(ref || "").match(/^([A-Za-z]+)/);
+  if (!m) return 0;
+  const s = m[1].toUpperCase();
+  let n = 0;
+  for (let i = 0; i < s.length; i++) n = n * 26 + (s.charCodeAt(i) - 64);
+  return n - 1;
+}
+
+function parseSheetXml(xml, shared) {
+  const doc = new DOMParser().parseFromString(xml, "application/xml");
+  const rows = doc.getElementsByTagName("row");
+  const rowData = [];
+  let maxCol = 0;
+  for (let i = 0; i < rows.length; i++) {
+    const cs = rows[i].getElementsByTagName("c");
+    const cells = [];
+    for (let j = 0; j < cs.length; j++) {
+      const c = cs[j];
+      const ci = colRefToIndex(c.getAttribute("r"));
+      const t = c.getAttribute("t");
+      let val = "";
+      if (t === "inlineStr") {
+        const ts = c.getElementsByTagName("t");
+        for (let k = 0; k < ts.length; k++) val += ts[k].textContent;
+      } else {
+        const vEl = c.getElementsByTagName("v")[0];
+        const rawVal = vEl ? vEl.textContent : "";
+        if (t === "s") {
+          const si = parseInt(rawVal, 10);
+          val = shared[si] != null ? shared[si] : "";
+        } else {
+          val = rawVal;
+        }
+      }
+      cells[ci] = val;
+      if (ci > maxCol) maxCol = ci;
+    }
+    rowData.push(cells);
+  }
+  const result = [];
+  rowData.forEach((cells) => {
+    const row = [];
+    for (let i = 0; i <= maxCol; i++) row.push(cells[i] != null ? cells[i] : "");
+    if (row.some((v) => String(v).trim() !== "")) result.push(row);
+  });
+  return result;
 }
 function handlePaste() {
   const text = pasteArea.value;
