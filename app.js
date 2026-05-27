@@ -596,7 +596,7 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
   head.appendChild(badge);
 
   const entWrap = document.createElement("span");
-  entWrap.className = "entity-choice";
+  entWrap.className = "entity-choice seg";
   ["法人", "個人"].forEach((v) => {
     const lab = document.createElement("label");
     const rb = document.createElement("input");
@@ -655,8 +655,15 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
       learnFromTx(acc, tx, dir);
       saveStore();
     });
+    const field = document.createElement("div");
+    field.className = "amount-field";
+    const yenMark = document.createElement("span");
+    yenMark.className = "yen";
+    yenMark.textContent = "¥";
+    field.appendChild(yenMark);
+    field.appendChild(inp);
     grid.appendChild(lab);
-    grid.appendChild(inp);
+    grid.appendChild(field);
   });
   td.appendChild(grid);
 
