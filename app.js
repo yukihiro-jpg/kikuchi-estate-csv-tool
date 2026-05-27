@@ -29,7 +29,7 @@ const ROLES = [
   { key: "deposit", label: "入金額", color: "#1d7d3f", tint: "#e7f8ed" },
   { key: "amount", label: "入出金（1列）", color: "#8944ab", tint: "#f3e9f8" },
   { key: "balance", label: "残高", color: "#b25000", tint: "#fcefe3" },
-  { key: "description", label: "摘要", color: "#0a7e8c", tint: "#e3f4f6" },
+  { key: "description", label: "摘要", color: "#0a7e8c", tint: "#e3f4f6", multi: true },
 ];
 const GUESS = {
   date: ["日付", "年月日", "取引日", "お取引日"],
@@ -142,8 +142,16 @@ function amtOf(roles, cells) {
   if (roles.amount != null) return Math.abs(toNumber(cells[roles.amount]));
   return 0;
 }
+function descCols(roles) {
+  const d = roles.description;
+  if (d == null) return [];
+  return Array.isArray(d) ? d : [d];
+}
 function descOf(roles, cells) {
-  return roles.description != null ? String(cells[roles.description] || "") : "";
+  return descCols(roles)
+    .map((i) => String(cells[i] || "").trim())
+    .filter((s) => s !== "")
+    .join(" ");
 }
 
 // ===== 学習（摘要×区分 ごとの内訳） =====
@@ -419,7 +427,12 @@ function openMapping(prefillRoles) {
   if (!lastImport) return;
   mapState = { roles: {}, active: null };
   ROLES.forEach((r) => {
-    mapState.roles[r.key] = prefillRoles && prefillRoles[r.key] != null ? prefillRoles[r.key] : null;
+    const pre = prefillRoles ? prefillRoles[r.key] : null;
+    if (r.multi) {
+      mapState.roles[r.key] = pre == null ? [] : Array.isArray(pre) ? pre.slice() : [pre];
+    } else {
+      mapState.roles[r.key] = pre != null ? pre : null;
+    }
   });
   renderMapping();
   setStatus(mappingStatus, "", "");
@@ -427,8 +440,23 @@ function openMapping(prefillRoles) {
   mappingSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
 
+function assignedCols(roleKey) {
+  const v = mapState.roles[roleKey];
+  if (Array.isArray(v)) return v;
+  return v != null ? [v] : [];
+}
 function roleForColumn(colIndex) {
-  return ROLES.find((r) => mapState.roles[r.key] === colIndex) || null;
+  return ROLES.find((r) => assignedCols(r.key).includes(colIndex)) || null;
+}
+function removeColumnFromOthers(colIndex, exceptKey) {
+  ROLES.forEach((r) => {
+    if (r.key === exceptKey) return;
+    if (Array.isArray(mapState.roles[r.key])) {
+      mapState.roles[r.key] = mapState.roles[r.key].filter((c) => c !== colIndex);
+    } else if (mapState.roles[r.key] === colIndex) {
+      mapState.roles[r.key] = null;
+    }
+  });
 }
 
 function assignColumn(colIndex) {
@@ -436,12 +464,23 @@ function assignColumn(colIndex) {
     setStatus(mappingStatus, "先に上の項目ボタン（日付・摘要・出金額など）を選んでください", "error");
     return;
   }
-  const role = mapState.active;
-  if (mapState.roles[role] === colIndex) {
-    mapState.roles[role] = null; // 同じ列を再クリックで解除
+  const roleDef = ROLES.find((r) => r.key === mapState.active);
+  if (roleDef.multi) {
+    const arr = Array.isArray(mapState.roles[roleDef.key]) ? mapState.roles[roleDef.key] : [];
+    const at = arr.indexOf(colIndex);
+    if (at >= 0) {
+      arr.splice(at, 1); // 再クリックで解除
+    } else {
+      removeColumnFromOthers(colIndex, roleDef.key);
+      arr.push(colIndex);
+      arr.sort((a, b) => a - b);
+    }
+    mapState.roles[roleDef.key] = arr;
+  } else if (mapState.roles[roleDef.key] === colIndex) {
+    mapState.roles[roleDef.key] = null; // 同じ列を再クリックで解除
   } else {
-    ROLES.forEach((r) => { if (mapState.roles[r.key] === colIndex) mapState.roles[r.key] = null; });
-    mapState.roles[role] = colIndex;
+    removeColumnFromOthers(colIndex, roleDef.key);
+    mapState.roles[roleDef.key] = colIndex;
   }
   setStatus(mappingStatus, "", "");
   renderMapping();
@@ -467,23 +506,23 @@ function renderMapping() {
 
     const lbl = document.createElement("span");
     lbl.className = "role-label";
-    lbl.textContent = r.label + (r.required ? " ＊" : "");
+    lbl.textContent = r.label + (r.required ? " ＊" : "") + (r.multi ? "（複数可）" : "");
     btn.appendChild(lbl);
 
-    const assignedCol = mapState.roles[r.key];
+    const cols = assignedCols(r.key);
     const assign = document.createElement("span");
     assign.className = "role-assign";
-    assign.textContent = assignedCol != null ? columns[assignedCol] : "未設定";
+    assign.textContent = cols.length ? cols.map((i) => columns[i]).join("、") : "未設定";
     btn.appendChild(assign);
 
-    if (assignedCol != null) {
+    if (cols.length) {
       const x = document.createElement("span");
       x.className = "role-clear";
       x.textContent = "✕";
-      x.title = "解除";
+      x.title = "すべて解除";
       x.addEventListener("click", (e) => {
         e.stopPropagation();
-        mapState.roles[r.key] = null;
+        mapState.roles[r.key] = r.multi ? [] : null;
         renderMapping();
       });
       btn.appendChild(x);
@@ -502,9 +541,10 @@ function renderMapping() {
   tip.className = "hint map-tip";
   if (mapState.active) {
     const ar = ROLES.find((r) => r.key === mapState.active);
-    tip.textContent = `「${ar.label}」を選択中です。下の表で、この項目にあたる列をクリックしてください（同じ列をもう一度押すと解除）。`;
+    const multiNote = ar.multi ? "複数の列を選べます。" : "";
+    tip.textContent = `「${ar.label}」を選択中です。下の表で、この項目にあたる列をクリックしてください。${multiNote}（同じ列をもう一度押すと解除）`;
   } else {
-    tip.textContent = "上の項目ボタンを選んでから、下の表で対応する列をクリックします。最低限「日付＊」を設定してください。";
+    tip.textContent = "上の項目ボタンを選んでから、下の表で対応する列をクリックします。最低限「日付＊」を設定してください。摘要は複数の列を選べます。";
   }
   mappingFields.appendChild(tip);
 
@@ -571,7 +611,12 @@ function renderMapping() {
 
 function readMappingRoles() {
   const roles = { date: null, withdrawal: null, deposit: null, amount: null, balance: null, description: null };
-  if (mapState) ROLES.forEach((r) => { roles[r.key] = mapState.roles[r.key]; });
+  if (mapState) {
+    ROLES.forEach((r) => {
+      const v = mapState.roles[r.key];
+      roles[r.key] = r.multi ? (Array.isArray(v) ? v.slice() : []) : v;
+    });
+  }
   return roles;
 }
 function applyMapping() {
@@ -597,7 +642,8 @@ function normKey(v) {
 }
 function rowKey(cells, roles) {
   const part = (r) => (r == null ? "" : normKey(cells[r]));
-  return [part(roles.date), part(roles.withdrawal), part(roles.deposit), part(roles.amount), part(roles.balance), part(roles.description)].join("");
+  const descPart = descCols(roles).map((i) => normKey(cells[i])).join("|");
+  return [part(roles.date), part(roles.withdrawal), part(roles.deposit), part(roles.amount), part(roles.balance), descPart].join("");
 }
 
 // ===== 取り込み（重複除外＋学習の事前反映） =====
