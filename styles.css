@@ -466,6 +466,8 @@ tbody tr:hover td.col-tekiyo { background: #f7f8fc; }
 }
 .del-btn:hover { color: #d70015; background: #fdecec; }
 
+.back-btn { padding: 4px 12px; font-size: 0.8rem; white-space: nowrap; }
+
 /* ===== 区分・分類セル ===== */
 .dir-badge {
   display: inline-block;

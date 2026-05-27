@@ -89,7 +89,7 @@
     <!-- 2. 明細の確認・分類入力 -->
     <section id="edit-section" class="card hidden">
       <h2>2. 明細の確認・分類の入力</h2>
-      <p class="hint"><span id="row-summary"></span>　各行で「法人／個人」を選び、内訳（家賃・ガス代・預り敷金など）の金額を入力してください。入力が終わったら下の「保存」ボタンを押すと、このパソコンのブラウザに記録されます。</p>
+      <p class="hint"><span id="row-summary"></span>　各行で「法人／個人」を選び、内訳（家賃・ガス代・預り敷金など）の金額を入力してください。入力が終わったら下の「保存」ボタンを押してください。</p>
       <div class="table-wrap">
         <table id="data-table">
           <thead></thead>
@@ -97,8 +97,20 @@
         </table>
       </div>
       <div class="btn-row save-row">
-        <button type="button" id="edit-save" class="btn btn-primary">保存（このパソコンに記録）</button>
+        <button type="button" id="edit-save" class="btn btn-primary">保存（加筆後の通帳データへ移動）</button>
         <span id="edit-status" class="status"></span>
+      </div>
+    </section>
+
+    <!-- 3. 加筆後の通帳データ（保存済み・Excel風表示） -->
+    <section id="final-section" class="card hidden">
+      <h2>3. 加筆後の通帳データ</h2>
+      <p class="hint"><span id="final-summary"></span>　保存済みの通帳データです。「編集に戻す」を押すと「2. 明細の確認・分類の入力」に戻せます。全口座分のCSVは設定（⚙）からダウンロードできます。</p>
+      <div class="table-wrap">
+        <table id="final-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
       </div>
     </section>
   </main>

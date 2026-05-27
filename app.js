@@ -99,6 +99,11 @@ const rowSummary = $("row-summary");
 const editSave = $("edit-save");
 const editStatus = $("edit-status");
 
+const finalSection = $("final-section");
+const finalTableHead = document.querySelector("#final-table thead");
+const finalTableBody = document.querySelector("#final-table tbody");
+const finalSummary = $("final-summary");
+
 const settingsDrawer = $("settings-drawer");
 const settingsOverlay = $("settings-overlay");
 const settingsClose = $("settings-close");
@@ -324,6 +329,7 @@ function renderAll() {
   remapBtn.classList.toggle("hidden", !(acc && acc.mapping && lastImport));
   if (inNew) {
     editSection.classList.add("hidden");
+    finalSection.classList.add("hidden");
   } else {
     renderTable();
   }
@@ -704,6 +710,7 @@ function mergeIntoAccount(acc, dataRows, roles) {
       entity: learned ? learned.entity : "",
       property: learned ? learned.property || "" : "",
       memo: "",
+      saved: false,
       items: learned ? learned.items.map((it) => ({ category: it.category, amount: it.amount })) : [],
     });
     added++;
@@ -714,15 +721,26 @@ function mergeIntoAccount(acc, dataRows, roles) {
 // ===== テーブル描画 =====
 function renderTable() {
   const acc = getCurrentAccount();
-  if (!acc || !acc.mapping || acc.transactions.length === 0) {
+  if (!acc || !acc.mapping) {
     editSection.classList.add("hidden");
-    if (acc) rowSummary.textContent = "";
+    finalSection.classList.add("hidden");
+    return;
+  }
+  const roles = acc.mapping.roles;
+  renderEditTable(acc, roles);
+  renderFinalTable(acc, roles);
+}
+
+// 「2. 明細の確認・分類の入力」＝未保存の取引のみ
+function renderEditTable(acc, roles) {
+  const unsaved = acc.transactions.filter((t) => !t.saved);
+  if (unsaved.length === 0) {
+    editSection.classList.add("hidden");
     return;
   }
   editSection.classList.remove("hidden");
-  const roles = acc.mapping.roles;
   const dcols = displayColumns(roles);
-  rowSummary.textContent = `保存済み：${acc.transactions.length}件`;
+  rowSummary.textContent = `未保存：${unsaved.length}件`;
 
   // ヘッダ（役割名を使用）
   tableHead.innerHTML = "";
@@ -741,6 +759,7 @@ function renderTable() {
   // 本体（1取引＝2行：通帳データ＋分類入力を一段下げて表示）
   tableBody.innerHTML = "";
   acc.transactions.forEach((tx, rowIndex) => {
+    if (tx.saved) return;
     if (!tx.items) tx.items = [];
     if (tx.entity == null) tx.entity = "";
     const dir = dirOf(roles, tx.cells);
@@ -777,6 +796,110 @@ function renderTable() {
     tdDetail.appendChild(buildDetailInner(acc, tx, rowIndex, dir));
     trDetail.appendChild(tdDetail);
     tableBody.appendChild(trDetail);
+  });
+}
+
+// 「3. 加筆後の通帳データ」＝保存済みの取引をExcel風に表示
+function finalCategoryColumns(acc) {
+  ensureCategories();
+  const cols = [];
+  const push = (c) => { if (c && !cols.includes(c)) cols.push(c); };
+  store.categories["入金"].forEach(push);
+  store.categories["出金"].forEach(push);
+  acc.transactions.forEach((t) => (t.items || []).forEach((it) => push(it.category)));
+  return cols;
+}
+function fmtNum(v) {
+  const n = toNumber(v);
+  return n === 0 ? "" : n.toLocaleString("ja-JP");
+}
+function renderFinalTable(acc, roles) {
+  const saved = acc.transactions.filter((t) => t.saved);
+  if (saved.length === 0) {
+    finalSection.classList.add("hidden");
+    return;
+  }
+  finalSection.classList.remove("hidden");
+  finalSummary.textContent = `保存済み：${saved.length}件`;
+  const catCols = finalCategoryColumns(acc);
+
+  // ヘッダ
+  finalTableHead.innerHTML = "";
+  const htr = document.createElement("tr");
+  const baseCols = [
+    { label: "日付" },
+    { label: "摘要" },
+    { label: "入金", num: true },
+    { label: "出金", num: true },
+    { label: "残高", num: true },
+    { label: "法人/個人" },
+    { label: "物件名" },
+  ];
+  baseCols.forEach((c) => {
+    const th = document.createElement("th");
+    th.textContent = c.label;
+    if (c.num) th.classList.add("num");
+    htr.appendChild(th);
+  });
+  catCols.forEach((c) => {
+    const th = document.createElement("th");
+    th.textContent = c;
+    th.classList.add("num");
+    htr.appendChild(th);
+  });
+  const thMemo = document.createElement("th");
+  thMemo.textContent = "メモ";
+  htr.appendChild(thMemo);
+  htr.appendChild(document.createElement("th")); // 編集に戻す列
+  finalTableHead.appendChild(htr);
+
+  // 本体
+  finalTableBody.innerHTML = "";
+  acc.transactions.forEach((tx, rowIndex) => {
+    if (!tx.saved) return;
+    const dir = dirOf(roles, tx.cells);
+    const amt = amtOf(roles, tx.cells);
+    const tr = document.createElement("tr");
+
+    const cells = [
+      { v: roles.date != null ? String(tx.cells[roles.date] || "") : "" },
+      { v: descOf(roles, tx.cells) },
+      { v: dir === "入金" ? fmtNum(amt) : "", num: true },
+      { v: dir === "出金" ? fmtNum(amt) : "", num: true },
+      { v: roles.balance != null ? fmtNum(tx.cells[roles.balance]) : "", num: true },
+      { v: tx.entity || "" },
+      { v: tx.property || "" },
+    ];
+    cells.forEach((c) => {
+      const td = document.createElement("td");
+      td.textContent = c.v;
+      if (c.num) td.classList.add("num");
+      tr.appendChild(td);
+    });
+    catCols.forEach((cat) => {
+      const td = document.createElement("td");
+      td.classList.add("num");
+      const it = (tx.items || []).find((i) => i.category === cat);
+      td.textContent = it ? fmtNum(it.amount) : "";
+      tr.appendChild(td);
+    });
+    const tdMemo = document.createElement("td");
+    tdMemo.textContent = tx.memo || "";
+    tr.appendChild(tdMemo);
+
+    const tdBack = document.createElement("td");
+    const backBtn = document.createElement("button");
+    backBtn.className = "btn back-btn";
+    backBtn.textContent = "編集に戻す";
+    backBtn.addEventListener("click", () => {
+      tx.saved = false;
+      saveStore();
+      renderTable();
+    });
+    tdBack.appendChild(backBtn);
+    tr.appendChild(tdBack);
+
+    finalTableBody.appendChild(tr);
   });
 }
 
@@ -1156,8 +1279,20 @@ document.addEventListener("keydown", (e) => {
 });
 
 editSave.addEventListener("click", () => {
+  const acc = getCurrentAccount();
+  if (!acc) return;
+  const unsavedCount = acc.transactions.filter((t) => !t.saved).length;
+  if (unsavedCount === 0) {
+    setStatus(editStatus, "保存できる明細がありません", "");
+    return;
+  }
+  const ok = confirm(
+    `入力した${unsavedCount}件を保存します。\n\n保存すると、これらは「2. 明細の確認・分類の入力」の一覧から削除され、「3. 加筆後の通帳データ」に移動します。よろしいですか？`
+  );
+  if (!ok) return;
+  acc.transactions.forEach((t) => { if (!t.saved) t.saved = true; });
   saveStore();
-  setStatus(editStatus, "保存しました（このパソコンのブラウザに記録されました）", "ok");
+  renderTable();
 });
 
 accountSave.addEventListener("click", saveAccount);
