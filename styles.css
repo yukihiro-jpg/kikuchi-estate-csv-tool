@@ -115,6 +115,29 @@ header h1 {
   font-weight: 500;
 }
 .acc-tab.add:hover { background: rgba(0, 113, 227, 0.08); color: var(--accent); }
+.acc-tab.has-error {
+  background: #fdecec;
+  color: #b91c1c;
+  box-shadow: inset 0 0 0 1px #f3b4b4;
+}
+.acc-tab.has-error.active {
+  background: #d70015;
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(215, 0, 21, 0.3);
+}
+.tab-warn { margin-left: 6px; }
+
+/* 残高エラーの警告バナー */
+.balance-alert {
+  background: #fdecec;
+  border: 1px solid #f3b4b4;
+  color: #991b1b;
+  border-radius: 14px;
+  padding: 14px 18px;
+  font-size: 0.9rem;
+  line-height: 1.7;
+}
+.balance-alert strong { display: block; margin-bottom: 4px; color: #b91c1c; }
 
 /* ===== レイアウト ===== */
 main {
@@ -558,7 +581,7 @@ tr.tx-detail:hover > td { background: #fafafc; }
   transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
 .tx-field.property-field input { width: 150px; }
-.tx-field.memo-field input { width: 190px; }
+.tx-field.memo-field input { width: 260px; max-width: 40vw; }
 .tx-field input:focus {
   outline: none;
   background: #fff;
@@ -594,7 +617,7 @@ tr.tx-detail:hover > td { background: #fafafc; }
 }
 .amount-field input::placeholder { color: #c7c7cc; }
 
-.cat-total { font-size: 0.8rem; color: var(--muted); margin-top: 2px; }
+.cat-total { font-size: 0.8rem; color: var(--muted); margin-left: auto; align-self: center; white-space: nowrap; padding-left: 12px; }
 .cat-total .ng { color: #d70015; font-weight: 600; }
 .cat-total .ok { color: #1d7d3f; font-weight: 600; }
 

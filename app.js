@@ -67,6 +67,7 @@ function categoriesForTx(dir, tx) {
 const $ = (id) => document.getElementById(id);
 const accountTabs = $("account-tabs");
 const settingsBtn = $("settings-btn");
+const balanceAlert = $("balance-alert");
 
 const accountSection = $("account-section");
 const accountHeading = $("account-heading");
@@ -131,6 +132,14 @@ function getCurrentAccount() {
 function yen(n) {
   return "¥" + Number(n || 0).toLocaleString("ja-JP");
 }
+// 入力欄用：数字だけ取り出して #,### に整形（マイナス可）
+function formatAmountInput(s) {
+  const str = String(s == null ? "" : s);
+  const neg = /^\s*[-−]/.test(str);
+  const digits = str.replace(/[^\d]/g, "");
+  if (digits === "") return "";
+  return (neg ? "-" : "") + parseInt(digits, 10).toLocaleString("ja-JP");
+}
 
 // 金額の文字列を数値へ（△▲・カッコ・＋−・カンマ・¥等に対応）
 function toNumber(str) {
@@ -172,6 +181,55 @@ function descOf(roles, cells) {
     .map((i) => String(cells[i] || "").trim())
     .filter((s) => s !== "")
     .join(" ");
+}
+// 残高チェック用：入金（＋）・出金（−）の符号付き増減
+function signedAmt(roles, cells) {
+  let s = 0;
+  if (roles.deposit != null) s += Math.abs(toNumber(cells[roles.deposit]));
+  if (roles.withdrawal != null) s -= Math.abs(toNumber(cells[roles.withdrawal]));
+  if (s === 0 && roles.amount != null) s = toNumber(cells[roles.amount]);
+  return s;
+}
+function parseDateNum(s) {
+  const m = String(s || "").match(/(\d{4})\s*[\/\-\.年]\s*(\d{1,2})\s*[\/\-\.月]\s*(\d{1,2})/);
+  if (!m) return null;
+  return +m[1] * 10000 + +m[2] * 100 + +m[3];
+}
+function formatDateJP(s) {
+  const m = String(s || "").match(/(\d{4})\s*[\/\-\.年]\s*(\d{1,2})\s*[\/\-\.月]\s*(\d{1,2})/);
+  if (!m) return String(s || "");
+  return `${+m[2]}月${+m[3]}日`;
+}
+// 残高が連続しているかを確認（アップロード漏れの検出）
+function checkBalanceContinuity(acc) {
+  if (!acc.mapping) return { ok: true, gaps: [] };
+  const roles = acc.mapping.roles;
+  if (roles.balance == null) return { ok: true, gaps: [] };
+  const hasAmt = roles.deposit != null || roles.withdrawal != null || roles.amount != null;
+  if (!hasAmt) return { ok: true, gaps: [] };
+  const arr = [];
+  for (let i = 0; i < acc.transactions.length; i++) {
+    const t = acc.transactions[i];
+    const d = parseDateNum(roles.date != null ? t.cells[roles.date] : "");
+    if (d == null) return { ok: true, gaps: [] }; // 日付が読めない場合はチェックしない
+    arr.push({
+      i,
+      d,
+      bal: toNumber(t.cells[roles.balance]),
+      delta: signedAmt(roles, t.cells),
+      dateStr: formatDateJP(roles.date != null ? t.cells[roles.date] : ""),
+    });
+  }
+  if (arr.length < 2) return { ok: true, gaps: [] };
+  arr.sort((a, b) => a.d - b.d || a.i - b.i);
+  const gaps = [];
+  for (let k = 1; k < arr.length; k++) {
+    const expected = arr[k - 1].bal + arr[k].delta;
+    if (Math.round(expected) !== Math.round(arr[k].bal)) {
+      gaps.push({ from: arr[k - 1].dateStr, to: arr[k].dateStr });
+    }
+  }
+  return { ok: gaps.length === 0, gaps };
 }
 
 // 明細テーブルに表示する列（マッピング済みのものだけ・役割名で見出し）
@@ -224,9 +282,17 @@ function renderTabs() {
   accountTabs.innerHTML = "";
   store.accounts.forEach((a) => {
     const b = document.createElement("button");
-    b.className = "acc-tab" + (a.id === store.selectedAccountId && formMode !== "new" ? " active" : "");
+    const hasGap = a.mapping && !checkBalanceContinuity(a).ok;
+    b.className = "acc-tab" + (a.id === store.selectedAccountId && formMode !== "new" ? " active" : "") + (hasGap ? " has-error" : "");
     const label = (a.bankName + (a.accountNumber ? "　" + a.accountNumber : "")).trim() || "(無名の口座)";
     b.textContent = label;
+    if (hasGap) {
+      const warn = document.createElement("span");
+      warn.className = "tab-warn";
+      warn.textContent = "⚠";
+      warn.title = "残高がつながっていません";
+      b.appendChild(warn);
+    }
     b.title = label;
     b.addEventListener("click", () => {
       store.selectedAccountId = a.id;
@@ -330,6 +396,7 @@ function renderAll() {
   if (inNew) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
+    balanceAlert.classList.add("hidden");
   } else {
     renderTable();
   }
@@ -724,11 +791,32 @@ function renderTable() {
   if (!acc || !acc.mapping) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
+    balanceAlert.classList.add("hidden");
     return;
   }
   const roles = acc.mapping.roles;
   renderEditTable(acc, roles);
   renderFinalTable(acc, roles);
+  renderBalanceAlert(acc);
+}
+
+function renderBalanceAlert(acc) {
+  const res = checkBalanceContinuity(acc);
+  if (res.ok) {
+    balanceAlert.classList.add("hidden");
+    balanceAlert.innerHTML = "";
+    return;
+  }
+  balanceAlert.classList.remove("hidden");
+  balanceAlert.innerHTML = "";
+  const title = document.createElement("strong");
+  title.textContent = "⚠ 残高がつながっていません（通帳の取り込み漏れの可能性）";
+  balanceAlert.appendChild(title);
+  res.gaps.forEach((g) => {
+    const p = document.createElement("div");
+    p.textContent = `${g.from}から${g.to}にかけての残高が合いません。その期間の通帳をアップロードしてください。`;
+    balanceAlert.appendChild(p);
+  });
 }
 
 // 「2. 明細の確認・分類の入力」＝未保存の取引のみ
@@ -958,10 +1046,12 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
     })
   );
 
+  let totalEl = null;
+  let refreshTotal = () => {};
   if (dir) {
-    const totalEl = document.createElement("span");
+    totalEl = document.createElement("span");
     totalEl.className = "cat-total";
-    function refreshTotal() {
+    refreshTotal = function () {
       const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
       const amt = amtOf(acc.mapping.roles, tx.cells);
       const diff = amt - itemsTotal;
@@ -971,7 +1061,7 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
       span.className = diff === 0 ? "ok" : "ng";
       span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
       totalEl.appendChild(span);
-    }
+    };
 
     // 分類ごとの金額欄を横に並べて常に表示
     categoriesForTx(dir, tx).forEach((cat) => {
@@ -986,9 +1076,11 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
       amtInp.type = "text";
       amtInp.inputMode = "numeric";
       amtInp.placeholder = "0";
-      amtInp.value = getItemAmount(tx, cat);
+      amtInp.value = formatAmountInput(getItemAmount(tx, cat));
       amtInp.addEventListener("input", () => {
-        setItemAmount(tx, cat, amtInp.value.trim());
+        const f = formatAmountInput(amtInp.value);
+        amtInp.value = f;
+        setItemAmount(tx, cat, f);
         refreshTotal();
         learnFromTx(acc, tx, dir);
         saveStore();
@@ -1004,9 +1096,6 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
 
       inner.appendChild(item);
     });
-
-    refreshTotal();
-    inner.appendChild(totalEl);
   } else {
     const note = document.createElement("span");
     note.className = "empty";
@@ -1014,13 +1103,19 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
     inner.appendChild(note);
   }
 
-  // メモ（1取引に1つ）
+  // メモ（1取引に1つ・物件名と同じライン）
   inner.appendChild(
     buildTxField("メモ", "memo-field", "メモを入力", tx.memo || "", (val) => {
       tx.memo = val;
       saveStore();
     })
   );
+
+  // 取引金額・入力・差額（右端）
+  if (dir) {
+    refreshTotal();
+    inner.appendChild(totalEl);
+  }
 
   return inner;
 }
