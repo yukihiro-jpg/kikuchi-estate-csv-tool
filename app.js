@@ -40,14 +40,27 @@ const GUESS = {
   description: ["摘要", "お取引内容", "取引内容", "内容", "明細", "備考", "メモ"],
 };
 
-// 入出金の分類項目
-const CATEGORIES = {
+// 入出金の分類項目（store.categories に保存・設定で編集可能）
+const DEFAULT_CATEGORIES = {
   入金: ["家賃", "ガス代", "預り敷金", "その他"],
   出金: ["預り敷金の返済", "家賃の返金", "ガス代の返金", "その他"],
 };
+function ensureCategories() {
+  if (!store.categories) store.categories = {};
+  if (!Array.isArray(store.categories["入金"])) store.categories["入金"] = DEFAULT_CATEGORIES["入金"].slice();
+  if (!Array.isArray(store.categories["出金"])) store.categories["出金"] = DEFAULT_CATEGORIES["出金"].slice();
+}
 function categoryOptions(dir) {
-  if (CATEGORIES[dir]) return CATEGORIES[dir];
-  return Array.from(new Set([...CATEGORIES["入金"], ...CATEGORIES["出金"]]));
+  ensureCategories();
+  if (store.categories[dir]) return store.categories[dir];
+  return Array.from(new Set([...store.categories["入金"], ...store.categories["出金"]]));
+}
+function categoriesForTx(dir, tx) {
+  const base = categoryOptions(dir).slice();
+  (tx.items || []).forEach((it) => {
+    if (it.category && !base.includes(it.category)) base.push(it.category);
+  });
+  return base;
 }
 
 // ===== DOM =====
@@ -55,6 +68,7 @@ const $ = (id) => document.getElementById(id);
 const accountTabs = $("account-tabs");
 const settingsBtn = $("settings-btn");
 
+const accountSection = $("account-section");
 const accountHeading = $("account-heading");
 const bankNameInput = $("bank-name");
 const accountNumberInput = $("account-number");
@@ -88,6 +102,7 @@ const editStatus = $("edit-status");
 const settingsDrawer = $("settings-drawer");
 const settingsOverlay = $("settings-overlay");
 const settingsClose = $("settings-close");
+const categoryManager = $("category-manager");
 const allPeriod = $("all-period");
 const rangeSelectors = $("range-selectors");
 const fromYear = $("from-year");
@@ -168,10 +183,14 @@ function displayColumns(roles) {
     c.key === "description" ? descCols(roles).length > 0 : roles[c.key] != null
   );
 }
-function displayValue(roles, cells, key) {
-  if (key === "description") return descOf(roles, cells);
-  const idx = roles[key];
-  return idx != null ? String(cells[idx] == null ? "" : cells[idx]) : "";
+function displayValue(roles, cells, col) {
+  if (col.key === "description") return descOf(roles, cells);
+  const idx = roles[col.key];
+  if (idx == null) return "";
+  const raw = cells[idx];
+  if (raw == null || String(raw).trim() === "") return "";
+  if (col.num) return toNumber(raw).toLocaleString("ja-JP");
+  return String(raw);
 }
 
 // ===== 学習（摘要×区分 ごとの内訳） =====
@@ -298,6 +317,7 @@ function renderAll() {
   renderAccountSection();
   const acc = getCurrentAccount();
   const inNew = formMode === "new" || !acc;
+  accountSection.classList.toggle("hidden", !inNew);
   importSection.classList.toggle("hidden", inNew);
   mappingSection.classList.add("hidden");
   remapBtn.classList.toggle("hidden", !(acc && acc.mapping && lastImport));
@@ -710,73 +730,80 @@ function renderTable() {
     if (c.num) th.classList.add("num");
     headRow.appendChild(th);
   });
-  const thCat = document.createElement("th");
-  thCat.textContent = "区分・分類・内訳";
-  thCat.classList.add("col-tekiyo");
-  headRow.appendChild(thCat);
-  headRow.appendChild(document.createElement("th"));
+  headRow.appendChild(document.createElement("th")); // 削除ボタン列
   tableHead.appendChild(headRow);
 
-  // 本体
+  const totalCols = dcols.length + 1;
+
+  // 本体（1取引＝2行：通帳データ＋分類入力を一段下げて表示）
   tableBody.innerHTML = "";
   acc.transactions.forEach((tx, rowIndex) => {
     if (!tx.items) tx.items = [];
     if (tx.entity == null) tx.entity = "";
     const dir = dirOf(roles, tx.cells);
 
-    const tr = document.createElement("tr");
+    // 1行目：通帳データ
+    const trMain = document.createElement("tr");
+    trMain.className = "tx-main";
     dcols.forEach((c) => {
       const td = document.createElement("td");
-      td.textContent = displayValue(roles, tx.cells, c.key);
+      td.textContent = displayValue(roles, tx.cells, c);
       if (c.num) td.classList.add("num");
-      tr.appendChild(td);
+      trMain.appendChild(td);
     });
-    tr.appendChild(buildClassificationCell(acc, tx, rowIndex, dir));
-
     const tdDel = document.createElement("td");
+    tdDel.className = "del-cell";
     const delBtn = document.createElement("button");
     delBtn.className = "del-btn";
     delBtn.textContent = "✕";
-    delBtn.title = "この行を削除";
+    delBtn.title = "この取引を削除";
     delBtn.addEventListener("click", () => {
       acc.transactions.splice(rowIndex, 1);
       saveStore();
       renderTable();
     });
     tdDel.appendChild(delBtn);
-    tr.appendChild(tdDel);
-    tableBody.appendChild(tr);
+    trMain.appendChild(tdDel);
+    tableBody.appendChild(trMain);
+
+    // 2行目：分類入力（一段下げ）
+    const trDetail = document.createElement("tr");
+    trDetail.className = "tx-detail";
+    const tdDetail = document.createElement("td");
+    tdDetail.colSpan = totalCols;
+    tdDetail.appendChild(buildDetailInner(acc, tx, rowIndex, dir));
+    trDetail.appendChild(tdDetail);
+    tableBody.appendChild(trDetail);
   });
 }
 
-// 分類セル：法人/個人の選択と、分類ごとの金額ボックスを常に表示
-function getItemAmount(tx, category) {
+// 分類セル：法人/個人の選択と、分類ごとの金額・メモ欄を常に表示
+function getItemField(tx, category, field) {
   const it = (tx.items || []).find((i) => i.category === category);
-  return it ? (it.amount == null ? "" : String(it.amount)) : "";
+  return it && it[field] != null ? String(it[field]) : "";
 }
-function setItemAmount(tx, category, value) {
+function setItemField(tx, category, field, value) {
   if (!tx.items) tx.items = [];
-  const idx = tx.items.findIndex((i) => i.category === category);
-  if (value === "" || value == null) {
-    if (idx >= 0) tx.items.splice(idx, 1);
-  } else if (idx >= 0) {
-    tx.items[idx].amount = value;
-  } else {
-    tx.items.push({ category, amount: value });
+  let it = tx.items.find((i) => i.category === category);
+  if (!it) {
+    if (value === "" || value == null) return;
+    it = { category, amount: "", memo: "" };
+    tx.items.push(it);
   }
+  it[field] = value;
+  const emptyAmt = !it.amount || String(it.amount).trim() === "";
+  const emptyMemo = !it.memo || String(it.memo).trim() === "";
+  if (emptyAmt && emptyMemo) tx.items = tx.items.filter((i) => i !== it);
 }
 
-function buildClassificationCell(acc, tx, rowIndex, dir) {
-  const td = document.createElement("td");
-  td.className = "col-tekiyo col-cat";
+function buildDetailInner(acc, tx, rowIndex, dir) {
+  const inner = document.createElement("div");
+  inner.className = "tx-detail-inner";
 
-  // 区分バッジ ＋ 法人/個人
-  const head = document.createElement("div");
-  head.className = "cat-head";
   const badge = document.createElement("span");
   badge.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
   badge.textContent = dir || "区分不明";
-  head.appendChild(badge);
+  inner.appendChild(badge);
 
   const entWrap = document.createElement("span");
   entWrap.className = "entity-choice seg";
@@ -796,18 +823,17 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
     lab.appendChild(document.createTextNode(v));
     entWrap.appendChild(lab);
   });
-  head.appendChild(entWrap);
-  td.appendChild(head);
+  inner.appendChild(entWrap);
 
   if (!dir) {
-    const note = document.createElement("div");
+    const note = document.createElement("span");
     note.className = "empty";
     note.textContent = "入金/出金が判別できないため内訳を入力できません";
-    td.appendChild(note);
-    return td;
+    inner.appendChild(note);
+    return inner;
   }
 
-  const totalEl = document.createElement("div");
+  const totalEl = document.createElement("span");
   totalEl.className = "cat-total";
   function refreshTotal() {
     const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
@@ -821,10 +847,8 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
     totalEl.appendChild(span);
   }
 
-  // 分類ごとの金額ボックスを横に並べて常に表示
-  const row = document.createElement("div");
-  row.className = "cat-row";
-  categoryOptions(dir).forEach((cat) => {
+  // 分類ごとの金額・メモ欄を横に並べて常に表示
+  categoriesForTx(dir, tx).forEach((cat) => {
     const item = document.createElement("div");
     item.className = "cat-item";
     const name = document.createElement("span");
@@ -832,13 +856,13 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
     name.textContent = cat;
     item.appendChild(name);
 
-    const inp = document.createElement("input");
-    inp.type = "text";
-    inp.inputMode = "numeric";
-    inp.placeholder = "0";
-    inp.value = getItemAmount(tx, cat);
-    inp.addEventListener("input", () => {
-      setItemAmount(tx, cat, inp.value.trim());
+    const amtInp = document.createElement("input");
+    amtInp.type = "text";
+    amtInp.inputMode = "numeric";
+    amtInp.placeholder = "0";
+    amtInp.value = getItemField(tx, cat, "amount");
+    amtInp.addEventListener("input", () => {
+      setItemField(tx, cat, "amount", amtInp.value.trim());
       refreshTotal();
       learnFromTx(acc, tx, dir);
       saveStore();
@@ -849,15 +873,26 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
     yenMark.className = "yen";
     yenMark.textContent = "¥";
     field.appendChild(yenMark);
-    field.appendChild(inp);
+    field.appendChild(amtInp);
     item.appendChild(field);
-    row.appendChild(item);
+
+    const memoInp = document.createElement("input");
+    memoInp.type = "text";
+    memoInp.className = "cat-memo";
+    memoInp.placeholder = "メモ";
+    memoInp.value = getItemField(tx, cat, "memo");
+    memoInp.addEventListener("input", () => {
+      setItemField(tx, cat, "memo", memoInp.value);
+      saveStore();
+    });
+    item.appendChild(memoInp);
+
+    inner.appendChild(item);
   });
-  td.appendChild(row);
 
   refreshTotal();
-  td.appendChild(totalEl);
-  return td;
+  inner.appendChild(totalEl);
+  return inner;
 }
 
 function learnFromTx(acc, tx, dir) {
@@ -877,7 +912,7 @@ function parseYearMonth(s) {
 }
 function buildCategorizedCSV(acc, fromYM, toYM) {
   const roles = acc.mapping.roles;
-  const headers = ["銀行名", "口座番号", "日付", "区分", "摘要", "取引金額", "残高", "法人/個人", "分類", "金額"];
+  const headers = ["銀行名", "口座番号", "日付", "区分", "摘要", "取引金額", "残高", "法人/個人", "分類", "金額", "メモ"];
   const lines = [headers.map(escapeField).join(",")];
   acc.transactions.forEach((tx) => {
     const dateCell = roles.date != null ? String(tx.cells[roles.date] || "") : "";
@@ -893,9 +928,13 @@ function buildCategorizedCSV(acc, fromYM, toYM) {
     const desc = descOf(roles, tx.cells);
     const bal = roles.balance != null ? String(tx.cells[roles.balance] || "") : "";
     const common = [acc.bankName, acc.accountNumber, dateCell, dir, desc, String(amt), bal, tx.entity || ""];
-    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "" }];
+    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "", memo: "" }];
     items.forEach((it) => {
-      const row = common.concat([it.category || "", it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount))]);
+      const row = common.concat([
+        it.category || "",
+        it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount)),
+        it.memo || "",
+      ]);
       lines.push(row.map(escapeField).join(","));
     });
   });
@@ -964,7 +1003,9 @@ function restoreData(file) {
       if (!store.selectedAccountId && store.accounts.length) store.selectedAccountId = store.accounts[0].id;
       formMode = store.accounts.length ? "edit" : "new";
       lastImport = null;
+      ensureCategories();
       saveStore();
+      renderCategorySettings();
       renderAll();
       setStatus(backupStatus, `復元しました（口座${store.accounts.length}件）`, "ok");
     } catch (err) {
@@ -1005,8 +1046,76 @@ function syncRange() {
   rangeSelectors.classList.toggle("disabled", allPeriod.checked);
 }
 
+// ===== 分類の管理（設定） =====
+function renderCategorySettings() {
+  ensureCategories();
+  categoryManager.innerHTML = "";
+  [["入金", "入金の分類"], ["出金", "出金の分類"]].forEach(([dir, title]) => {
+    const group = document.createElement("div");
+    group.className = "cat-group";
+    const h = document.createElement("h4");
+    h.textContent = title;
+    group.appendChild(h);
+
+    const list = document.createElement("div");
+    list.className = "cat-chip-list";
+    store.categories[dir].forEach((cat, idx) => {
+      const chip = document.createElement("span");
+      chip.className = "cat-chip";
+      chip.appendChild(document.createTextNode(cat));
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "cat-chip-del";
+      x.textContent = "✕";
+      x.title = "削除";
+      x.addEventListener("click", () => {
+        store.categories[dir].splice(idx, 1);
+        saveStore();
+        renderCategorySettings();
+        renderTable();
+      });
+      chip.appendChild(x);
+      list.appendChild(chip);
+    });
+    if (store.categories[dir].length === 0) {
+      const e = document.createElement("span");
+      e.className = "empty";
+      e.textContent = "分類がありません";
+      list.appendChild(e);
+    }
+    group.appendChild(list);
+
+    const addRow = document.createElement("div");
+    addRow.className = "cat-add-row";
+    const input = document.createElement("input");
+    input.type = "text";
+    input.placeholder = "新しい分類を入力";
+    const addBtn = document.createElement("button");
+    addBtn.type = "button";
+    addBtn.className = "btn btn-primary";
+    addBtn.textContent = "追加";
+    function doAdd() {
+      const name = input.value.trim();
+      if (!name) return;
+      if (!store.categories[dir].includes(name)) store.categories[dir].push(name);
+      saveStore();
+      input.value = "";
+      renderCategorySettings();
+      renderTable();
+    }
+    addBtn.addEventListener("click", doAdd);
+    input.addEventListener("keydown", (e) => { if (e.key === "Enter") { e.preventDefault(); doAdd(); } });
+    addRow.appendChild(input);
+    addRow.appendChild(addBtn);
+    group.appendChild(addRow);
+
+    categoryManager.appendChild(group);
+  });
+}
+
 // ===== イベント登録 =====
 function openSettings() {
+  renderCategorySettings();
   settingsOverlay.classList.remove("hidden");
   settingsDrawer.classList.add("open");
   settingsDrawer.setAttribute("aria-hidden", "false");
@@ -1074,5 +1183,7 @@ if (store.accounts.length === 0) {
   formMode = "edit";
   if (!getCurrentAccount()) store.selectedAccountId = store.accounts[0].id;
 }
+ensureCategories();
 populateRange();
+renderCategorySettings();
 renderAll();
