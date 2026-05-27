@@ -55,6 +55,19 @@ function categoryOptions(dir) {
   if (store.categories[dir]) return store.categories[dir];
   return Array.from(new Set([...store.categories["入金"], ...store.categories["出金"]]));
 }
+// 既存データから空行（マッピング列がすべて空の行）を除去
+function cleanupBlankTransactions() {
+  let removed = 0;
+  store.accounts.forEach((a) => {
+    if (!a.mapping || !Array.isArray(a.transactions)) return;
+    const roles = a.mapping.roles;
+    const before = a.transactions.length;
+    a.transactions = a.transactions.filter((t) => isMeaningfulRow(roles, t.cells));
+    removed += before - a.transactions.length;
+  });
+  if (removed > 0) saveStore();
+}
+
 function categoriesForTx(dir, tx) {
   const base = categoryOptions(dir).slice();
   (tx.items || []).forEach((it) => {
@@ -182,6 +195,14 @@ function descOf(roles, cells) {
     .filter((s) => s !== "")
     .join(" ");
 }
+// 取引として意味のある行か（マッピング列がすべて空の行＝銀行ファイルの見出し/口座情報行などを除外）
+function isMeaningfulRow(roles, cells) {
+  const dateOk = roles.date != null && String(cells[roles.date] == null ? "" : cells[roles.date]).trim() !== "";
+  const descOk = descOf(roles, cells).trim() !== "";
+  const balOk = roles.balance != null && String(cells[roles.balance] == null ? "" : cells[roles.balance]).trim() !== "";
+  return dateOk || descOk || balOk || amtOf(roles, cells) !== 0;
+}
+
 // 残高チェック用：入金（＋）・出金（−）の符号付き増減
 function signedAmt(roles, cells) {
   let s = 0;
@@ -659,7 +680,12 @@ function startImport(records) {
   }
 }
 function importMessage(res, acc) {
-  return `取り込み完了：新規${res.added}件を追加${res.dup ? `／重複${res.dup}件は除外` : ""}（合計${acc.transactions.length}件）`;
+  return (
+    `取り込み完了：新規${res.added}件を追加` +
+    (res.dup ? `／重複${res.dup}件は除外` : "") +
+    (res.skipped ? `／見出し・空行${res.skipped}件は除外` : "") +
+    `（合計${acc.transactions.length}件）`
+  );
 }
 
 // ヘッダ名から役割を推測（最長一致で割り当て）
@@ -915,9 +941,10 @@ function rowKey(cells, roles) {
 function mergeIntoAccount(acc, dataRows, roles) {
   const cols = acc.mapping.columns;
   const existing = new Set(acc.transactions.map((t) => rowKey(t.cells, roles)));
-  let added = 0, dup = 0;
+  let added = 0, dup = 0, skipped = 0;
   dataRows.forEach((row) => {
     const cells = cols.map((_, i) => (row[i] !== undefined ? row[i] : ""));
+    if (!isMeaningfulRow(roles, cells)) { skipped++; return; } // 見出し/空行などを除外
     const key = rowKey(cells, roles);
     if (existing.has(key)) { dup++; return; }
     existing.add(key);
@@ -933,7 +960,7 @@ function mergeIntoAccount(acc, dataRows, roles) {
     });
     added++;
   });
-  return { added, dup };
+  return { added, dup, skipped };
 }
 
 // ===== テーブル描画 =====
@@ -1282,7 +1309,6 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
     span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
     totalEl.appendChild(span);
   }
-  meta.appendChild(totalEl);
 
   // 収入（＋）行
   const incLine = document.createElement("div");
@@ -1314,6 +1340,12 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
     dedLine.appendChild(addDed);
   }
   inner.appendChild(dedLine);
+
+  // 合計・差額（独立した行・左揃えで位置を固定）
+  const totalLine = document.createElement("div");
+  totalLine.className = "cat-total-line";
+  totalLine.appendChild(totalEl);
+  inner.appendChild(totalLine);
 
   refreshTotal();
   return inner;
@@ -1482,6 +1514,7 @@ function restoreData(file) {
       formMode = store.accounts.length ? "edit" : "new";
       lastImport = null;
       ensureCategories();
+      cleanupBlankTransactions();
       saveStore();
       renderCategorySettings();
       renderAll();
@@ -1674,6 +1707,7 @@ if (store.accounts.length === 0) {
   if (!getCurrentAccount()) store.selectedAccountId = store.accounts[0].id;
 }
 ensureCategories();
+cleanupBlankTransactions();
 populateRange();
 renderCategorySettings();
 renderAll();
