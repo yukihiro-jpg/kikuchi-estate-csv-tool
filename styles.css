@@ -568,6 +568,32 @@ tr.tx-detail:hover > td { background: #fafafc; }
 }
 .cat-name { font-size: 0.72rem; color: var(--muted); line-height: 1.2; }
 
+/* 収入(＋)／控除(−) のグループ見出し */
+.cat-group-label { align-self: center; font-size: 0.74rem; font-weight: 700; padding: 0 2px; white-space: nowrap; }
+.cat-group-label.plus { color: #1d7d3f; }
+.cat-group-label.minus { color: #d70015; }
+
+/* 控除（−）項目の見た目 */
+.cat-item.minus .amount-field input {
+  padding-left: 28px;
+  border-color: #f1c2c2;
+  background: #fff6f6;
+}
+.cat-item.minus .amount-field .yen { color: #d70015; }
+
+.add-deduction-btn {
+  align-self: center;
+  background: #fff;
+  border: 1px dashed var(--border);
+  border-radius: 980px;
+  padding: 5px 12px;
+  font-size: 0.78rem;
+  color: var(--accent);
+  cursor: pointer;
+  white-space: nowrap;
+}
+.add-deduction-btn:hover { background: rgba(0, 113, 227, 0.06); border-color: var(--accent); }
+
 /* 取引単位の入力欄（物件名・メモ） */
 .tx-field { display: flex; flex-direction: column; gap: 3px; }
 .tx-field-label { font-size: 0.72rem; color: var(--muted); line-height: 1.2; }

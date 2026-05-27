@@ -58,7 +58,7 @@ function categoryOptions(dir) {
 function categoriesForTx(dir, tx) {
   const base = categoryOptions(dir).slice();
   (tx.items || []).forEach((it) => {
-    if (it.category && !base.includes(it.category)) base.push(it.category);
+    if (it.category && (it.cdir || dir) === dir && !base.includes(it.category)) base.push(it.category);
   });
   return base;
 }
@@ -273,7 +273,7 @@ function setLearned(acc, dir, desc, entity, property, items) {
   acc.learn[learnKey(dir, desc)] = {
     entity: entity || "",
     property: property || "",
-    items: items.map((it) => ({ category: it.category, amount: it.amount })),
+    items: items.map((it) => ({ category: it.category, amount: it.amount, cdir: it.cdir || dir })),
   };
 }
 
@@ -921,7 +921,7 @@ function mergeIntoAccount(acc, dataRows, roles) {
       property: learned ? learned.property || "" : "",
       memo: "",
       saved: false,
-      items: learned ? learned.items.map((it) => ({ category: it.category, amount: it.amount })) : [],
+      items: learned ? learned.items.map((it) => ({ category: it.category, amount: it.amount, cdir: it.cdir || dir })) : [],
     });
     added++;
   });
@@ -1110,8 +1110,12 @@ function renderFinalTable(acc, roles) {
     catCols.forEach((cat) => {
       const td = document.createElement("td");
       td.classList.add("num");
-      const it = (tx.items || []).find((i) => i.category === cat);
-      td.textContent = it ? fmtNum(it.amount) : "";
+      let sum = 0;
+      let has = false;
+      (tx.items || []).forEach((i) => {
+        if (i.category === cat) { has = true; sum += toNumber(i.amount) * ((i.cdir || dir) === dir ? 1 : -1); }
+      });
+      td.textContent = has ? fmtNum(sum) : "";
       tr.appendChild(td);
     });
     const tdMemo = document.createElement("td");
@@ -1135,20 +1139,34 @@ function renderFinalTable(acc, roles) {
 }
 
 // 分類セル：法人/個人の選択と、分類ごとの金額欄を常に表示
-function getItemAmount(tx, category) {
-  const it = (tx.items || []).find((i) => i.category === category);
+// items は {category, amount, cdir} を持つ。cdir はその分類の所属方向（入金/出金）。
+// 取引方向(txDir)と同じ cdir は加算（収入/支出）、反対の cdir は控除（マイナス）として扱う。
+const deductionOpen = new WeakSet(); // 控除欄を開いている取引
+
+function oppositeDir(dir) {
+  return dir === "入金" ? "出金" : "入金";
+}
+// 旧データ（cdir なし）は取引方向に属する加算項目として補正
+function normalizeItemDirs(tx, txDir) {
+  (tx.items || []).forEach((it) => { if (!it.cdir) it.cdir = txDir; });
+}
+function getItemAmount(tx, cdir, category) {
+  const it = (tx.items || []).find((i) => i.category === category && i.cdir === cdir);
   return it && it.amount != null ? String(it.amount) : "";
 }
-function setItemAmount(tx, category, value) {
+function setItemAmount(tx, cdir, category, value) {
   if (!tx.items) tx.items = [];
-  const idx = tx.items.findIndex((i) => i.category === category);
+  const idx = tx.items.findIndex((i) => i.category === category && i.cdir === cdir);
   if (value === "" || value == null) {
     if (idx >= 0) tx.items.splice(idx, 1);
   } else if (idx >= 0) {
     tx.items[idx].amount = value;
   } else {
-    tx.items.push({ category, amount: value });
+    tx.items.push({ category, amount: value, cdir });
   }
+}
+function hasDeductionItems(tx, txDir) {
+  return (tx.items || []).some((it) => (it.cdir || txDir) !== txDir && String(it.amount).trim() !== "");
 }
 
 function buildDetailInner(acc, tx, rowIndex, dir) {
@@ -1192,53 +1210,55 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
   let totalEl = null;
   let refreshTotal = () => {};
   if (dir) {
+    normalizeItemDirs(tx, dir);
+    const opp = oppositeDir(dir);
+    const showDeduction = deductionOpen.has(tx) || hasDeductionItems(tx, dir);
+
     totalEl = document.createElement("span");
     totalEl.className = "cat-total";
     refreshTotal = function () {
-      const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
+      const income = (tx.items || []).reduce((s, it) => s + (it.cdir === dir ? toNumber(it.amount) : 0), 0);
+      const deduct = (tx.items || []).reduce((s, it) => s + (it.cdir === opp ? toNumber(it.amount) : 0), 0);
+      const net = income - deduct;
       const amt = amtOf(acc.mapping.roles, tx.cells);
-      const diff = amt - itemsTotal;
+      const diff = amt - net;
       totalEl.innerHTML = "";
-      totalEl.appendChild(document.createTextNode(`取引 ${yen(amt)}　入力 ${yen(itemsTotal)}　差額 `));
+      const mainLabel = dir === "入金" ? "収入" : "支出";
+      const txt = deduct > 0
+        ? `取引 ${yen(amt)}　${mainLabel} ${yen(income)} − 控除 ${yen(deduct)} ＝ ${yen(net)}　差額 `
+        : `取引 ${yen(amt)}　入力 ${yen(net)}　差額 `;
+      totalEl.appendChild(document.createTextNode(txt));
       const span = document.createElement("span");
       span.className = diff === 0 ? "ok" : "ng";
       span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
       totalEl.appendChild(span);
     };
 
-    // 分類ごとの金額欄を横に並べて常に表示
+    // 収入（＋）グループ
+    const mainLabel = dir === "入金" ? "収入(＋)" : "支出(＋)";
+    inner.appendChild(buildGroupLabel(mainLabel, false));
     categoriesForTx(dir, tx).forEach((cat) => {
-      const item = document.createElement("div");
-      item.className = "cat-item";
-      const name = document.createElement("span");
-      name.className = "cat-name";
-      name.textContent = cat;
-      item.appendChild(name);
-
-      const amtInp = document.createElement("input");
-      amtInp.type = "text";
-      amtInp.inputMode = "numeric";
-      amtInp.placeholder = "0";
-      amtInp.value = formatAmountInput(getItemAmount(tx, cat));
-      amtInp.addEventListener("input", () => {
-        const f = formatAmountInput(amtInp.value);
-        amtInp.value = f;
-        setItemAmount(tx, cat, f);
-        refreshTotal();
-        learnFromTx(acc, tx, dir);
-        saveStore();
-      });
-      const field = document.createElement("div");
-      field.className = "amount-field";
-      const yenMark = document.createElement("span");
-      yenMark.className = "yen";
-      yenMark.textContent = "¥";
-      field.appendChild(yenMark);
-      field.appendChild(amtInp);
-      item.appendChild(field);
-
-      inner.appendChild(item);
+      inner.appendChild(buildCatItem(acc, tx, dir, dir, cat, refreshTotal));
     });
+
+    // 控除（−）グループ（必要なときだけ表示）
+    if (showDeduction) {
+      inner.appendChild(buildGroupLabel("控除(−)", true));
+      categoriesForTx(opp, tx).forEach((cat) => {
+        inner.appendChild(buildCatItem(acc, tx, dir, opp, cat, refreshTotal));
+      });
+    } else {
+      const addDed = document.createElement("button");
+      addDed.type = "button";
+      addDed.className = "add-deduction-btn";
+      addDed.textContent = "＋ 控除（−）項目";
+      addDed.title = "敷金返金など、入金から差し引く項目を入力する";
+      addDed.addEventListener("click", () => {
+        deductionOpen.add(tx);
+        renderTable();
+      });
+      inner.appendChild(addDed);
+    }
   } else {
     const note = document.createElement("span");
     note.className = "empty";
@@ -1261,6 +1281,45 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
   }
 
   return inner;
+}
+
+function buildGroupLabel(text, minus) {
+  const el = document.createElement("span");
+  el.className = "cat-group-label" + (minus ? " minus" : " plus");
+  el.textContent = text;
+  return el;
+}
+
+function buildCatItem(acc, tx, txDir, cdir, cat, refreshTotal) {
+  const item = document.createElement("div");
+  item.className = "cat-item" + (cdir === txDir ? "" : " minus");
+  const name = document.createElement("span");
+  name.className = "cat-name";
+  name.textContent = cat;
+  item.appendChild(name);
+
+  const amtInp = document.createElement("input");
+  amtInp.type = "text";
+  amtInp.inputMode = "numeric";
+  amtInp.placeholder = "0";
+  amtInp.value = formatAmountInput(getItemAmount(tx, cdir, cat));
+  amtInp.addEventListener("input", () => {
+    const f = formatAmountInput(amtInp.value);
+    amtInp.value = f;
+    setItemAmount(tx, cdir, cat, f);
+    refreshTotal();
+    learnFromTx(acc, tx, txDir);
+    saveStore();
+  });
+  const field = document.createElement("div");
+  field.className = "amount-field";
+  const yenMark = document.createElement("span");
+  yenMark.className = "yen";
+  yenMark.textContent = cdir === txDir ? "¥" : "−¥";
+  field.appendChild(yenMark);
+  field.appendChild(amtInp);
+  item.appendChild(field);
+  return item;
 }
 
 function buildTxField(label, cls, placeholder, value, onInput) {
@@ -1312,13 +1371,12 @@ function buildCategorizedCSV(acc, fromYM, toYM) {
     const desc = descOf(roles, tx.cells);
     const bal = roles.balance != null ? String(tx.cells[roles.balance] || "") : "";
     const common = [acc.bankName, acc.accountNumber, dateCell, dir, desc, String(amt), bal, tx.entity || "", tx.property || ""];
-    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "" }];
+    const items = tx.items && tx.items.length ? tx.items : [{ category: "", amount: "", cdir: dir }];
     items.forEach((it) => {
-      const row = common.concat([
-        it.category || "",
-        it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount)),
-        tx.memo || "",
-      ]);
+      // 控除（取引方向と反対）の項目は金額をマイナスで出力（合計＝取引額になる）
+      const sign = (it.cdir || dir) === dir ? 1 : -1;
+      const amount = it.amount === "" || it.amount == null ? "" : String(toNumber(it.amount) * sign);
+      const row = common.concat([it.category || "", amount, tx.memo || ""]);
       lines.push(row.map(escapeField).join(","));
     });
   });
