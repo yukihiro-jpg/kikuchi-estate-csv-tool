@@ -18,6 +18,9 @@ const tableBody = document.querySelector("#data-table tbody");
 const exportBtn = document.getElementById("export-btn");
 const exportName = document.getElementById("export-name");
 const exportStatus = document.getElementById("export-status");
+const pasteArea = document.getElementById("paste-area");
+const pasteBtn = document.getElementById("paste-btn");
+const hasHeader = document.getElementById("has-header");
 
 // ----- 文字コード判定付きでファイル読込 -----
 function decodeBytes(buffer) {
@@ -40,8 +43,8 @@ function handleFile(file) {
   reader.onload = () => {
     try {
       const text = decodeBytes(reader.result);
-      const parsed = parseCSV(text);
-      loadData(parsed);
+      const parsed = parseDelimited(text, ",");
+      loadData(parsed, hasHeader.checked);
       setStatus(fileStatus, `「${file.name}」を読み込みました（${rows.length}件）`, "ok");
     } catch (err) {
       setStatus(fileStatus, "読み込みに失敗しました: " + err.message, "error");
@@ -51,8 +54,8 @@ function handleFile(file) {
   reader.readAsArrayBuffer(file);
 }
 
-// ----- CSVパーサ（ダブルクォート・改行・カンマ対応） -----
-function parseCSV(text) {
+// ----- 区切り文字パーサ（ダブルクォート・改行・任意の区切り対応） -----
+function parseDelimited(text, delimiter) {
   const records = [];
   let field = "";
   let record = [];
@@ -72,7 +75,7 @@ function parseCSV(text) {
     } else {
       if (c === '"') {
         inQuotes = true;
-      } else if (c === ",") {
+      } else if (c === delimiter) {
         record.push(field); field = "";
       } else if (c === "\n") {
         record.push(field); field = "";
@@ -91,11 +94,42 @@ function parseCSV(text) {
   return records.filter(r => r.some(v => v.trim() !== ""));
 }
 
+// ----- 貼り付けテキストの取込（タブ区切り or カンマ区切りを自動判別） -----
+function handlePaste() {
+  const text = pasteArea.value;
+  if (!text.trim()) {
+    setStatus(fileStatus, "貼り付け欄が空です", "error");
+    return;
+  }
+  try {
+    // HTMLの表からコピーした場合はタブ区切りになる。無ければカンマ区切り。
+    const delimiter = text.includes("\t") ? "\t" : ",";
+    const parsed = parseDelimited(text, delimiter);
+    loadData(parsed, hasHeader.checked);
+    setStatus(fileStatus, `貼り付けデータを読み込みました（${rows.length}件）`, "ok");
+  } catch (err) {
+    setStatus(fileStatus, "取込に失敗しました: " + err.message, "error");
+  }
+}
+
 // ----- パース結果を状態に反映 -----
-function loadData(records) {
+function loadData(records, headerInFirstRow) {
   if (records.length === 0) throw new Error("データが空です");
 
-  headers = records[0].map((h, i) => h.trim() || `列${i + 1}`);
+  const colCount = records.reduce((max, r) => Math.max(max, r.length), 0);
+  let dataRecords;
+  if (headerInFirstRow) {
+    headers = [];
+    for (let i = 0; i < colCount; i++) {
+      const name = (records[0][i] || "").trim();
+      headers.push(name || `列${i + 1}`);
+    }
+    dataRecords = records.slice(1);
+  } else {
+    headers = [];
+    for (let i = 0; i < colCount; i++) headers.push(`列${i + 1}`);
+    dataRecords = records;
+  }
 
   // 既存の摘要列があれば再利用、無ければ新規追加
   const existing = headers.find(h => h === TEKIYO_LABEL || h.includes("摘要"));
@@ -106,7 +140,7 @@ function loadData(records) {
     headers.push(tekiyoKey);
   }
 
-  rows = records.slice(1).map(cols => {
+  rows = dataRecords.map(cols => {
     const obj = {};
     headers.forEach((h, i) => { obj[h] = cols[i] !== undefined ? cols[i] : ""; });
     return obj;
@@ -223,3 +257,15 @@ dropzone.addEventListener("drop", e => {
 });
 
 exportBtn.addEventListener("click", exportCSV);
+pasteBtn.addEventListener("click", handlePaste);
+
+// タブ切替
+document.querySelectorAll(".tab").forEach(tab => {
+  tab.addEventListener("click", () => {
+    document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+    tab.classList.add("active");
+    const target = tab.dataset.tab;
+    document.getElementById("tab-file").classList.toggle("hidden", target !== "file");
+    document.getElementById("tab-paste").classList.toggle("hidden", target !== "paste");
+  });
+});

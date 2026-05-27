@@ -48,6 +48,48 @@ main {
 
 .hidden { display: none; }
 
+.tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid var(--border);
+  margin-bottom: 16px;
+}
+.tab {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  padding: 8px 16px;
+  font-size: 0.95rem;
+  cursor: pointer;
+  color: var(--muted);
+}
+.tab.active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+  font-weight: 600;
+}
+
+textarea#paste-area {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 10px;
+  font-family: inherit;
+  font-size: 0.9rem;
+  margin-bottom: 12px;
+  resize: vertical;
+}
+
+.checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 14px;
+  font-size: 0.9rem;
+  color: var(--text);
+}
+.checkbox input { margin: 0; }
+
 .dropzone {
   border: 2px dashed var(--border);
   border-radius: 10px;

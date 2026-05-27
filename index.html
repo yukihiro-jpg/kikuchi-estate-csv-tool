@@ -14,16 +14,35 @@
 
   <main>
     <section id="import-section" class="card">
-      <h2>1. 通帳CSVを取り込む</h2>
-      <div id="dropzone" class="dropzone">
-        <p>ここにCSVファイルをドラッグ＆ドロップ</p>
-        <p>または</p>
-        <label class="btn">
-          ファイルを選択
-          <input type="file" id="file-input" accept=".csv,text/csv" hidden>
-        </label>
-        <p class="hint">Shift-JIS / UTF-8 どちらの文字コードでも読み込めます</p>
+      <h2>1. 通帳データを取り込む</h2>
+
+      <div class="tabs">
+        <button type="button" class="tab active" data-tab="file">CSVファイルから</button>
+        <button type="button" class="tab" data-tab="paste">コピー＆貼り付けから</button>
       </div>
+
+      <div id="tab-file" class="tab-panel">
+        <div id="dropzone" class="dropzone">
+          <p>ここにCSVファイルをドラッグ＆ドロップ</p>
+          <p>または</p>
+          <label class="btn">
+            ファイルを選択
+            <input type="file" id="file-input" accept=".csv,text/csv" hidden>
+          </label>
+          <p class="hint">Shift-JIS / UTF-8 どちらの文字コードでも読み込めます</p>
+        </div>
+      </div>
+
+      <div id="tab-paste" class="tab-panel hidden">
+        <p class="hint">ネットバンキングの取引明細をマウスでドラッグして選択しコピー（Ctrl+C）し、下の欄に貼り付け（Ctrl+V）て「取り込む」を押してください。</p>
+        <textarea id="paste-area" rows="8" placeholder="ここに取引明細を貼り付け..."></textarea>
+        <button type="button" id="paste-btn" class="btn btn-primary">取り込む</button>
+      </div>
+
+      <label class="checkbox">
+        <input type="checkbox" id="has-header" checked>
+        1行目を見出し（項目名）として扱う
+      </label>
       <p id="file-status" class="status"></p>
     </section>
 
