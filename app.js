@@ -80,6 +80,10 @@ function categoriesForTx(dir, tx) {
 const $ = (id) => document.getElementById(id);
 const accountTabs = $("account-tabs");
 const settingsBtn = $("settings-btn");
+const helpBtn = $("help-btn");
+const helpModal = $("help-modal");
+const helpOverlay = $("help-overlay");
+const helpClose = $("help-close");
 const balanceAlert = $("balance-alert");
 
 const accountSection = $("account-section");
@@ -1483,13 +1487,6 @@ function triggerDownload(blob, filename) {
   document.body.removeChild(a);
   URL.revokeObjectURL(url);
 }
-function downloadAccountCSV(acc, fromYM, toYM, suffix) {
-  const csv = buildCategorizedCSV(acc, fromYM, toYM);
-  const bom = new Uint8Array([0xef, 0xbb, 0xbf]);
-  const blob = new Blob([bom, csv], { type: "text/csv;charset=utf-8" });
-  const base = sanitizeName(acc.bankName + (acc.accountNumber ? "_" + acc.accountNumber : ""));
-  triggerDownload(blob, `${base}_${suffix}.csv`);
-}
 function bulkDownload() {
   const targets = store.accounts.filter((a) => a.mapping && a.transactions.length);
   if (targets.length === 0) {
@@ -1506,10 +1503,90 @@ function bulkDownload() {
     }
     suffix = `${fromYear.value}-${String(fromMonth.value).padStart(2, "0")}_${toYear.value}-${String(toMonth.value).padStart(2, "0")}`;
   }
-  targets.forEach((acc, i) => {
-    setTimeout(() => downloadAccountCSV(acc, fromYM, toYM, suffix), i * 400);
+  const enc = new TextEncoder();
+  const usedNames = {};
+  const files = targets.map((acc) => {
+    const csv = buildCategorizedCSV(acc, fromYM, toYM);
+    const base = sanitizeName(acc.bankName + (acc.accountNumber ? "_" + acc.accountNumber : "")) || "口座";
+    let name = `${base}_${suffix}.csv`;
+    if (usedNames[name]) {
+      usedNames[name] += 1;
+      name = `${base}_${suffix}(${usedNames[name]}).csv`;
+    } else {
+      usedNames[name] = 1;
+    }
+    return { name, data: enc.encode("﻿" + csv) }; // BOM付きUTF-8
   });
-  setStatus(exportStatus, `${targets.length}口座分のCSVをダウンロードします（ブラウザが複数ファイルの許可を求めたら「許可」してください）`, "ok");
+  const zip = buildZip(files);
+  const today = new Date().toISOString().slice(0, 10);
+  triggerDownload(zip, `通帳ツール_全口座_${suffix}_${today}.zip`);
+  setStatus(exportStatus, `${targets.length}口座分のCSVをZIPでダウンロードしました`, "ok");
+}
+
+// ===== ZIP書き出し（無圧縮stored・CRC32付き） =====
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+function crc32(bytes) {
+  let c = 0xffffffff;
+  for (let i = 0; i < bytes.length; i++) c = CRC_TABLE[(c ^ bytes[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+function buildZip(files) {
+  const enc = new TextEncoder();
+  const parts = [];
+  const central = [];
+  let offset = 0;
+  files.forEach((f) => {
+    const nameBytes = enc.encode(f.name);
+    const data = f.data;
+    const crc = crc32(data);
+    const size = data.length;
+    const lh = new Uint8Array(30 + nameBytes.length);
+    const lv = new DataView(lh.buffer);
+    lv.setUint32(0, 0x04034b50, true);
+    lv.setUint16(4, 20, true);
+    lv.setUint16(6, 0x0800, true); // UTF-8 ファイル名
+    lv.setUint16(8, 0, true); // stored
+    lv.setUint32(14, crc, true);
+    lv.setUint32(18, size, true);
+    lv.setUint32(22, size, true);
+    lv.setUint16(26, nameBytes.length, true);
+    lh.set(nameBytes, 30);
+    parts.push(lh, data);
+
+    const ch = new Uint8Array(46 + nameBytes.length);
+    const cv = new DataView(ch.buffer);
+    cv.setUint32(0, 0x02014b50, true);
+    cv.setUint16(4, 20, true);
+    cv.setUint16(6, 20, true);
+    cv.setUint16(8, 0x0800, true);
+    cv.setUint16(10, 0, true);
+    cv.setUint32(16, crc, true);
+    cv.setUint32(20, size, true);
+    cv.setUint32(24, size, true);
+    cv.setUint16(28, nameBytes.length, true);
+    cv.setUint32(42, offset, true);
+    ch.set(nameBytes, 46);
+    central.push(ch);
+
+    offset += lh.length + data.length;
+  });
+  const cdSize = central.reduce((s, c) => s + c.length, 0);
+  const eocd = new Uint8Array(22);
+  const ev = new DataView(eocd.buffer);
+  ev.setUint32(0, 0x06054b50, true);
+  ev.setUint16(8, files.length, true);
+  ev.setUint16(10, files.length, true);
+  ev.setUint32(12, cdSize, true);
+  ev.setUint32(16, offset, true);
+  return new Blob([...parts, ...central, eocd], { type: "application/zip" });
 }
 
 // ===== バックアップ／復元 =====
@@ -1659,8 +1736,23 @@ function closeSettings() {
 settingsBtn.addEventListener("click", openSettings);
 settingsClose.addEventListener("click", closeSettings);
 settingsOverlay.addEventListener("click", closeSettings);
+
+function openHelp() {
+  helpOverlay.classList.remove("hidden");
+  helpModal.classList.remove("hidden");
+}
+function closeHelp() {
+  helpOverlay.classList.add("hidden");
+  helpModal.classList.add("hidden");
+}
+helpBtn.addEventListener("click", openHelp);
+helpClose.addEventListener("click", closeHelp);
+helpOverlay.addEventListener("click", closeHelp);
+
 document.addEventListener("keydown", (e) => {
-  if (e.key === "Escape" && settingsDrawer.classList.contains("open")) closeSettings();
+  if (e.key !== "Escape") return;
+  if (settingsDrawer.classList.contains("open")) closeSettings();
+  if (!helpModal.classList.contains("hidden")) closeHelp();
 });
 
 editSave.addEventListener("click", () => {

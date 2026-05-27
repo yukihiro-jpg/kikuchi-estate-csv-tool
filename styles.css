@@ -505,7 +505,7 @@ tbody tr:hover td.col-tekiyo { background: #f7f8fc; }
 .dir-none { background: #ececf0; color: #6e6e73; }
 
 /* 1取引＝2行（通帳データ＋一段下げの分類入力） */
-tr.tx-main td { border-bottom: none; padding-bottom: 3px; }
+tr.tx-main td { border-bottom: none; padding-bottom: 4px; vertical-align: middle; }
 tr.tx-detail > td {
   padding: 0 14px 12px 0;
   white-space: normal;
@@ -789,3 +789,73 @@ tr.tx-detail:hover > td { background: #fafafc; }
 .drawer-close:hover { background: rgba(0, 0, 0, 0.1); color: var(--text); }
 .drawer-body { padding: 24px; overflow-y: auto; }
 .drawer-body h3:first-child { margin-top: 0; }
+
+/* ===== ヘッダーのボタン群 ===== */
+.header-actions { display: flex; align-items: center; gap: 8px; }
+
+/* ===== 操作説明書モーダル ===== */
+.help-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  width: min(920px, 94vw);
+  max-height: 90vh;
+  background: var(--card);
+  border-radius: 18px;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 24px 70px rgba(0, 0, 0, 0.28);
+}
+.help-modal.hidden { display: none; }
+.help-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 24px;
+  border-bottom: 1px solid var(--border-soft);
+}
+.help-header h2 { margin: 0; font-size: 1.2rem; font-weight: 600; }
+.help-body { padding: 22px 28px 32px; overflow-y: auto; }
+.help-lead { font-size: 0.95rem; margin-top: 0; }
+.help-step { margin-top: 24px; }
+.help-step h3 {
+  font-size: 1.05rem;
+  margin: 0 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 2px solid var(--accent);
+  display: inline-block;
+}
+.help-step ul, .help-note ul { margin: 8px 0 0; padding-left: 20px; }
+.help-step li, .help-note li { margin: 4px 0; font-size: 0.9rem; }
+.help-step p { font-size: 0.92rem; }
+.help-note {
+  background: #eef5ff;
+  border: 1px solid #cfe0fb;
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin: 16px 0;
+  font-size: 0.9rem;
+}
+.help-note strong { color: var(--accent-dark); }
+.help-shot {
+  background: #f5f5f7;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  padding: 14px;
+  margin: 12px 0;
+  overflow-x: auto;
+}
+.help-shot input[readonly] { pointer-events: none; }
+.help-cap { font-size: 0.82rem; color: var(--muted); margin: 6px 0 0; }
+.role-chip {
+  display: inline-block;
+  background: var(--c, #888);
+  color: #fff;
+  border-radius: 980px;
+  padding: 1px 9px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  white-space: nowrap;
+}
