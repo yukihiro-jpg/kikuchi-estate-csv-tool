@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>キクチエステート 通帳CSV摘要ツール</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <header>
+    <h1>通帳CSV 摘要付与ツール</h1>
+    <p class="subtitle">キクチエステート用 / 通帳取引CSVを取り込み、摘要を入力してCSV出力します</p>
+  </header>
+
+  <main>
+    <section id="import-section" class="card">
+      <h2>1. 通帳CSVを取り込む</h2>
+      <div id="dropzone" class="dropzone">
+        <p>ここにCSVファイルをドラッグ＆ドロップ</p>
+        <p>または</p>
+        <label class="btn">
+          ファイルを選択
+          <input type="file" id="file-input" accept=".csv,text/csv" hidden>
+        </label>
+        <p class="hint">Shift-JIS / UTF-8 どちらの文字コードでも読み込めます</p>
+      </div>
+      <p id="file-status" class="status"></p>
+    </section>
+
+    <section id="edit-section" class="card hidden">
+      <h2>2. 摘要を入力する</h2>
+      <p class="hint">「摘要」列のセルをクリックして入力できます。行の削除も可能です。</p>
+      <div class="table-wrap">
+        <table id="data-table">
+          <thead></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </section>
+
+    <section id="export-section" class="card hidden">
+      <h2>3. CSVを出力する</h2>
+      <label class="field">
+        出力ファイル名
+        <input type="text" id="export-name" value="摘要付き通帳データ.csv">
+      </label>
+      <button id="export-btn" class="btn btn-primary">CSVをダウンロード</button>
+      <p id="export-status" class="status"></p>
+    </section>
+  </main>
+
+  <script src="app.js"></script>
+</body>
+</html>

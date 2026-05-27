@@ -1,0 +1,144 @@
+:root {
+  --accent: #2563eb;
+  --accent-dark: #1d4ed8;
+  --bg: #f5f6f8;
+  --card: #ffffff;
+  --border: #d7dbe0;
+  --text: #1f2937;
+  --muted: #6b7280;
+  --highlight: #fef9c3;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", Meiryo, sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  line-height: 1.6;
+}
+
+header {
+  background: var(--accent);
+  color: #fff;
+  padding: 24px 32px;
+}
+
+header h1 { margin: 0 0 4px; font-size: 1.5rem; }
+.subtitle { margin: 0; opacity: 0.9; font-size: 0.9rem; }
+
+main {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 24px;
+}
+
+.card h2 { margin-top: 0; font-size: 1.15rem; }
+
+.hidden { display: none; }
+
+.dropzone {
+  border: 2px dashed var(--border);
+  border-radius: 10px;
+  padding: 32px;
+  text-align: center;
+  color: var(--muted);
+  transition: border-color 0.15s, background 0.15s;
+}
+
+.dropzone.dragover {
+  border-color: var(--accent);
+  background: #eff6ff;
+}
+
+.dropzone p { margin: 6px 0; }
+.hint { font-size: 0.82rem; color: var(--muted); }
+
+.btn {
+  display: inline-block;
+  background: #e5e7eb;
+  color: var(--text);
+  border: none;
+  border-radius: 6px;
+  padding: 8px 18px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+.btn:hover { background: #d1d5db; }
+
+.btn-primary { background: var(--accent); color: #fff; }
+.btn-primary:hover { background: var(--accent-dark); }
+
+.status { font-size: 0.9rem; color: var(--muted); min-height: 1.2em; }
+.status.error { color: #dc2626; }
+.status.ok { color: #16a34a; }
+
+.field {
+  display: block;
+  margin-bottom: 14px;
+  font-size: 0.9rem;
+}
+.field input {
+  display: block;
+  margin-top: 4px;
+  padding: 8px 10px;
+  width: 320px;
+  max-width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.table-wrap { overflow-x: auto; max-height: 60vh; overflow-y: auto; }
+
+table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 0.88rem;
+}
+
+th, td {
+  border: 1px solid var(--border);
+  padding: 6px 10px;
+  text-align: left;
+  white-space: nowrap;
+}
+
+thead th {
+  position: sticky;
+  top: 0;
+  background: #f3f4f6;
+  z-index: 1;
+}
+
+th.col-tekiyo, td.col-tekiyo { background: var(--highlight); min-width: 220px; }
+
+td[contenteditable="true"] {
+  cursor: text;
+  white-space: normal;
+}
+td[contenteditable="true"]:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
+.del-btn {
+  background: none;
+  border: none;
+  color: #dc2626;
+  cursor: pointer;
+  font-size: 1rem;
+  padding: 0 4px;
+}
+.del-btn:hover { color: #991b1b; }
