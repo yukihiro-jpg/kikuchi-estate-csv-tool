@@ -965,7 +965,7 @@ function mergeIntoAccount(acc, dataRows, roles) {
 }
 
 // 学習結果を取り込み時に反映する内容を決める
-// 入金：物件名と「家賃（収入）」だけをセットし、他は空欄
+// 入金：区分（法人/個人）・物件名・「家賃（収入）」をセットし、他の内訳は空欄
 // 出金：従来どおり（区分・物件名・内訳すべて）
 function applyLearned(learned, dir) {
   if (!learned) return { entity: "", property: "", items: [] };
@@ -974,7 +974,7 @@ function applyLearned(learned, dir) {
     const items = rent && String(rent.amount).trim() !== ""
       ? [{ category: "家賃", amount: rent.amount, cdir: "入金" }]
       : [];
-    return { entity: "", property: learned.property || "", items };
+    return { entity: learned.entity || "", property: learned.property || "", items };
   }
   return {
     entity: learned.entity || "",
