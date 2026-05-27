@@ -515,16 +515,37 @@ tr.tx-main:hover td,
 tr.tx-detail:hover > td { background: #fafafc; }
 .tx-detail-inner {
   display: flex;
-  align-items: center;
-  flex-wrap: wrap;
-  gap: 8px 14px;
+  flex-direction: column;
+  gap: 7px;
   margin-left: 36px;
-  padding: 9px 14px;
+  padding: 10px 14px;
   border-left: 3px solid var(--accent);
   background: var(--cat-bg);
   border-radius: 0 12px 12px 0;
 }
+.detail-meta { display: flex; align-items: center; flex-wrap: wrap; gap: 8px 14px; }
+.cat-line { display: flex; align-items: center; flex-wrap: wrap; gap: 6px 10px; }
 .tx-detail-inner .empty { color: var(--muted); font-size: 0.85rem; }
+
+/* 通帳データ行の物件名入力 */
+.row-property {
+  width: 140px;
+  max-width: 100%;
+  padding: 5px 10px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.84rem;
+  background: var(--fill);
+  color: var(--text);
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+}
+.row-property:focus {
+  outline: none;
+  background: #fff;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+}
+.row-property::placeholder { color: #c7c7cc; }
 
 /* 法人/個人セグメントコントロール */
 .entity-choice.seg {

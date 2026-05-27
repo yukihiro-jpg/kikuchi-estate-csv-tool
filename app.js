@@ -42,7 +42,7 @@ const GUESS = {
 
 // 入出金の分類項目（store.categories に保存・設定で編集可能）
 const DEFAULT_CATEGORIES = {
-  入金: ["家賃", "ガス代", "預り敷金", "その他"],
+  入金: ["家賃", "ガス代", "預り敷金", "クリーニング代", "その他"],
   出金: ["預り敷金の返済", "家賃の返金", "ガス代の返金", "その他"],
 };
 function ensureCategories() {
@@ -254,6 +254,14 @@ function displayValue(roles, cells, col) {
   if (raw == null || String(raw).trim() === "") return "";
   if (col.num) return toNumber(raw).toLocaleString("ja-JP");
   return String(raw);
+}
+// 上段（通帳データ行）の列：摘要の直後に「物件名」列を差し込む
+function topColumns(roles) {
+  const arr = displayColumns(roles);
+  let idx = arr.findIndex((c) => c.key === "description");
+  if (idx < 0) idx = arr.findIndex((c) => c.key === "date");
+  arr.splice(idx + 1, 0, { key: "__property", label: "物件名" });
+  return arr;
 }
 
 // ===== 学習（摘要×区分 ごとの内訳） =====
@@ -970,13 +978,13 @@ function renderEditTable(acc, roles) {
     return;
   }
   editSection.classList.remove("hidden");
-  const dcols = displayColumns(roles);
+  const tcols = topColumns(roles);
   rowSummary.textContent = `未保存：${unsaved.length}件`;
 
-  // ヘッダ（役割名を使用）
+  // ヘッダ（役割名を使用・摘要の隣に物件名）
   tableHead.innerHTML = "";
   const headRow = document.createElement("tr");
-  dcols.forEach((c) => {
+  tcols.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c.label;
     if (c.num) th.classList.add("num");
@@ -985,7 +993,7 @@ function renderEditTable(acc, roles) {
   headRow.appendChild(document.createElement("th")); // 削除ボタン列
   tableHead.appendChild(headRow);
 
-  const totalCols = dcols.length + 1;
+  const totalCols = tcols.length + 1;
 
   // 本体（1取引＝2行：通帳データ＋分類入力を一段下げて表示）
   tableBody.innerHTML = "";
@@ -995,13 +1003,18 @@ function renderEditTable(acc, roles) {
     if (tx.entity == null) tx.entity = "";
     const dir = dirOf(roles, tx.cells);
 
-    // 1行目：通帳データ
+    // 1行目：通帳データ（＋物件名入力）
     const trMain = document.createElement("tr");
     trMain.className = "tx-main";
-    dcols.forEach((c) => {
+    tcols.forEach((c) => {
       const td = document.createElement("td");
-      td.textContent = displayValue(roles, tx.cells, c);
-      if (c.num) td.classList.add("num");
+      if (c.key === "__property") {
+        td.className = "property-cell";
+        td.appendChild(buildPropertyInput(acc, tx, dir));
+      } else {
+        td.textContent = displayValue(roles, tx.cells, c);
+        if (c.num) td.classList.add("num");
+      }
       trMain.appendChild(td);
     });
     const tdDel = document.createElement("td");
@@ -1169,14 +1182,46 @@ function hasDeductionItems(tx, txDir) {
   return (tx.items || []).some((it) => (it.cdir || txDir) !== txDir && String(it.amount).trim() !== "");
 }
 
+function buildPropertyInput(acc, tx, dir) {
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "row-property";
+  inp.placeholder = "物件名";
+  inp.value = tx.property || "";
+  inp.addEventListener("input", () => {
+    tx.property = inp.value;
+    learnFromTx(acc, tx, dir);
+    saveStore();
+  });
+  inp.addEventListener("change", () => {
+    // 同じ摘要の未保存取引にも自動反映
+    const roles = acc.mapping.roles;
+    const desc = descOf(roles, tx.cells);
+    if (!desc) return;
+    let changed = false;
+    acc.transactions.forEach((t) => {
+      if (!t.saved && t !== tx && dirOf(roles, t.cells) === dir && descOf(roles, t.cells) === desc && t.property !== tx.property) {
+        t.property = tx.property;
+        changed = true;
+      }
+    });
+    if (changed) { saveStore(); renderTable(); }
+  });
+  return inp;
+}
+
 function buildDetailInner(acc, tx, rowIndex, dir) {
   const inner = document.createElement("div");
   inner.className = "tx-detail-inner";
 
+  // メタ行：区分・法人個人・メモ・合計
+  const meta = document.createElement("div");
+  meta.className = "detail-meta";
+
   const badge = document.createElement("span");
   badge.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
   badge.textContent = dir || "区分不明";
-  inner.appendChild(badge);
+  meta.appendChild(badge);
 
   const entWrap = document.createElement("span");
   entWrap.className = "entity-choice seg";
@@ -1196,90 +1241,81 @@ function buildDetailInner(acc, tx, rowIndex, dir) {
     lab.appendChild(document.createTextNode(v));
     entWrap.appendChild(lab);
   });
-  inner.appendChild(entWrap);
+  meta.appendChild(entWrap);
 
-  // 物件名（入金・出金共通・1取引に1つ）
-  inner.appendChild(
-    buildTxField("物件名", "property-field", "物件名を入力", tx.property || "", (val) => {
-      tx.property = val;
-      learnFromTx(acc, tx, dir);
-      saveStore();
-    })
-  );
-
-  let totalEl = null;
-  let refreshTotal = () => {};
-  if (dir) {
-    normalizeItemDirs(tx, dir);
-    const opp = oppositeDir(dir);
-    const showDeduction = deductionOpen.has(tx) || hasDeductionItems(tx, dir);
-
-    totalEl = document.createElement("span");
-    totalEl.className = "cat-total";
-    refreshTotal = function () {
-      const income = (tx.items || []).reduce((s, it) => s + (it.cdir === dir ? toNumber(it.amount) : 0), 0);
-      const deduct = (tx.items || []).reduce((s, it) => s + (it.cdir === opp ? toNumber(it.amount) : 0), 0);
-      const net = income - deduct;
-      const amt = amtOf(acc.mapping.roles, tx.cells);
-      const diff = amt - net;
-      totalEl.innerHTML = "";
-      const mainLabel = dir === "入金" ? "収入" : "支出";
-      const txt = deduct > 0
-        ? `取引 ${yen(amt)}　${mainLabel} ${yen(income)} − 控除 ${yen(deduct)} ＝ ${yen(net)}　差額 `
-        : `取引 ${yen(amt)}　入力 ${yen(net)}　差額 `;
-      totalEl.appendChild(document.createTextNode(txt));
-      const span = document.createElement("span");
-      span.className = diff === 0 ? "ok" : "ng";
-      span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
-      totalEl.appendChild(span);
-    };
-
-    // 収入（＋）グループ
-    const mainLabel = dir === "入金" ? "収入(＋)" : "支出(＋)";
-    inner.appendChild(buildGroupLabel(mainLabel, false));
-    categoriesForTx(dir, tx).forEach((cat) => {
-      inner.appendChild(buildCatItem(acc, tx, dir, dir, cat, refreshTotal));
-    });
-
-    // 控除（−）グループ（必要なときだけ表示）
-    if (showDeduction) {
-      inner.appendChild(buildGroupLabel("控除(−)", true));
-      categoriesForTx(opp, tx).forEach((cat) => {
-        inner.appendChild(buildCatItem(acc, tx, dir, opp, cat, refreshTotal));
-      });
-    } else {
-      const addDed = document.createElement("button");
-      addDed.type = "button";
-      addDed.className = "add-deduction-btn";
-      addDed.textContent = "＋ 控除（−）項目";
-      addDed.title = "敷金返金など、入金から差し引く項目を入力する";
-      addDed.addEventListener("click", () => {
-        deductionOpen.add(tx);
-        renderTable();
-      });
-      inner.appendChild(addDed);
-    }
-  } else {
-    const note = document.createElement("span");
-    note.className = "empty";
-    note.textContent = "入金/出金が判別できないため内訳を入力できません";
-    inner.appendChild(note);
-  }
-
-  // メモ（1取引に1つ・物件名と同じライン）
-  inner.appendChild(
+  meta.appendChild(
     buildTxField("メモ", "memo-field", "メモを入力", tx.memo || "", (val) => {
       tx.memo = val;
       saveStore();
     })
   );
+  inner.appendChild(meta);
 
-  // 取引金額・入力・差額（右端）
-  if (dir) {
-    refreshTotal();
-    inner.appendChild(totalEl);
+  if (!dir) {
+    const note = document.createElement("span");
+    note.className = "empty";
+    note.textContent = "入金/出金が判別できないため内訳を入力できません";
+    meta.appendChild(note);
+    return inner;
   }
 
+  normalizeItemDirs(tx, dir);
+  const opp = oppositeDir(dir);
+  const showDeduction = deductionOpen.has(tx) || hasDeductionItems(tx, dir);
+
+  const totalEl = document.createElement("span");
+  totalEl.className = "cat-total";
+  function refreshTotal() {
+    const income = (tx.items || []).reduce((s, it) => s + (it.cdir === dir ? toNumber(it.amount) : 0), 0);
+    const deduct = (tx.items || []).reduce((s, it) => s + (it.cdir === opp ? toNumber(it.amount) : 0), 0);
+    const net = income - deduct;
+    const amt = amtOf(acc.mapping.roles, tx.cells);
+    const diff = amt - net;
+    totalEl.innerHTML = "";
+    const mainLabel = dir === "入金" ? "収入" : "支出";
+    const txt = deduct > 0
+      ? `取引 ${yen(amt)}　${mainLabel} ${yen(income)} − 控除 ${yen(deduct)} ＝ ${yen(net)}　差額 `
+      : `取引 ${yen(amt)}　入力 ${yen(net)}　差額 `;
+    totalEl.appendChild(document.createTextNode(txt));
+    const span = document.createElement("span");
+    span.className = diff === 0 ? "ok" : "ng";
+    span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
+    totalEl.appendChild(span);
+  }
+  meta.appendChild(totalEl);
+
+  // 収入（＋）行
+  const incLine = document.createElement("div");
+  incLine.className = "cat-line";
+  incLine.appendChild(buildGroupLabel(dir === "入金" ? "収入(＋)" : "支出(＋)", false));
+  categoriesForTx(dir, tx).forEach((cat) => {
+    incLine.appendChild(buildCatItem(acc, tx, dir, dir, cat, refreshTotal));
+  });
+  inner.appendChild(incLine);
+
+  // 控除（−）行（必要なときだけ）
+  const dedLine = document.createElement("div");
+  dedLine.className = "cat-line";
+  if (showDeduction) {
+    dedLine.appendChild(buildGroupLabel("控除(−)", true));
+    categoriesForTx(opp, tx).forEach((cat) => {
+      dedLine.appendChild(buildCatItem(acc, tx, dir, opp, cat, refreshTotal));
+    });
+  } else {
+    const addDed = document.createElement("button");
+    addDed.type = "button";
+    addDed.className = "add-deduction-btn";
+    addDed.textContent = "＋ 控除（−）項目";
+    addDed.title = "敷金返金など、入金から差し引く項目を入力する";
+    addDed.addEventListener("click", () => {
+      deductionOpen.add(tx);
+      renderTable();
+    });
+    dedLine.appendChild(addDed);
+  }
+  inner.appendChild(dedLine);
+
+  refreshTotal();
   return inner;
 }
 
