@@ -154,6 +154,26 @@ function descOf(roles, cells) {
     .join(" ");
 }
 
+// 明細テーブルに表示する列（マッピング済みのものだけ・役割名で見出し）
+const DISPLAY_COLS = [
+  { key: "date", label: "日付" },
+  { key: "description", label: "摘要" },
+  { key: "deposit", label: "入金", num: true },
+  { key: "withdrawal", label: "出金", num: true },
+  { key: "amount", label: "入出金", num: true },
+  { key: "balance", label: "残高", num: true },
+];
+function displayColumns(roles) {
+  return DISPLAY_COLS.filter((c) =>
+    c.key === "description" ? descCols(roles).length > 0 : roles[c.key] != null
+  );
+}
+function displayValue(roles, cells, key) {
+  if (key === "description") return descOf(roles, cells);
+  const idx = roles[key];
+  return idx != null ? String(cells[idx] == null ? "" : cells[idx]) : "";
+}
+
 // ===== 学習（摘要×区分 ごとの内訳） =====
 function learnKey(dir, desc) {
   return dir + "" + normKey(desc);
@@ -677,20 +697,21 @@ function renderTable() {
     return;
   }
   editSection.classList.remove("hidden");
-  const cols = acc.mapping.columns;
   const roles = acc.mapping.roles;
+  const dcols = displayColumns(roles);
   rowSummary.textContent = `保存済み：${acc.transactions.length}件`;
 
-  // ヘッダ
+  // ヘッダ（役割名を使用）
   tableHead.innerHTML = "";
   const headRow = document.createElement("tr");
-  cols.forEach((h) => {
+  dcols.forEach((c) => {
     const th = document.createElement("th");
-    th.textContent = h;
+    th.textContent = c.label;
+    if (c.num) th.classList.add("num");
     headRow.appendChild(th);
   });
   const thCat = document.createElement("th");
-  thCat.textContent = "区分・分類";
+  thCat.textContent = "区分・分類・内訳";
   thCat.classList.add("col-tekiyo");
   headRow.appendChild(thCat);
   headRow.appendChild(document.createElement("th"));
@@ -704,9 +725,10 @@ function renderTable() {
     const dir = dirOf(roles, tx.cells);
 
     const tr = document.createElement("tr");
-    cols.forEach((h, i) => {
+    dcols.forEach((c) => {
       const td = document.createElement("td");
-      td.textContent = tx.cells[i] !== undefined ? tx.cells[i] : "";
+      td.textContent = displayValue(roles, tx.cells, c.key);
+      if (c.num) td.classList.add("num");
       tr.appendChild(td);
     });
     tr.appendChild(buildClassificationCell(acc, tx, rowIndex, dir));
@@ -790,21 +812,26 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
   function refreshTotal() {
     const itemsTotal = (tx.items || []).reduce((s, it) => s + toNumber(it.amount), 0);
     const amt = amtOf(acc.mapping.roles, tx.cells);
-    const ok = itemsTotal === amt;
+    const diff = amt - itemsTotal;
     totalEl.innerHTML = "";
-    totalEl.appendChild(document.createTextNode(`取引金額 ${yen(amt)} ／ 内訳合計 `));
+    totalEl.appendChild(document.createTextNode(`取引 ${yen(amt)}　入力 ${yen(itemsTotal)}　差額 `));
     const span = document.createElement("span");
-    span.className = ok ? "ok" : "ng";
-    span.textContent = yen(itemsTotal) + (ok ? "（一致）" : "（不一致）");
+    span.className = diff === 0 ? "ok" : "ng";
+    span.textContent = yen(diff) + (diff === 0 ? "（一致）" : "");
     totalEl.appendChild(span);
   }
 
-  // 分類ごとの金額ボックスを常に表示
-  const grid = document.createElement("div");
-  grid.className = "cat-grid";
+  // 分類ごとの金額ボックスを横に並べて常に表示
+  const row = document.createElement("div");
+  row.className = "cat-row";
   categoryOptions(dir).forEach((cat) => {
-    const lab = document.createElement("label");
-    lab.textContent = cat;
+    const item = document.createElement("div");
+    item.className = "cat-item";
+    const name = document.createElement("span");
+    name.className = "cat-name";
+    name.textContent = cat;
+    item.appendChild(name);
+
     const inp = document.createElement("input");
     inp.type = "text";
     inp.inputMode = "numeric";
@@ -823,10 +850,10 @@ function buildClassificationCell(acc, tx, rowIndex, dir) {
     yenMark.textContent = "¥";
     field.appendChild(yenMark);
     field.appendChild(inp);
-    grid.appendChild(lab);
-    grid.appendChild(field);
+    item.appendChild(field);
+    row.appendChild(item);
   });
-  td.appendChild(grid);
+  td.appendChild(row);
 
   refreshTotal();
   td.appendChild(totalEl);
