@@ -22,14 +22,14 @@ let store = loadStore();
 let lastImport = null; // 直近に取り込んだ生データ {columns, dataRows, hasHeader}
 let formMode = "edit"; // "edit" | "new"
 
-// マッピングで扱う役割
+// マッピングで扱う役割（色つき）
 const ROLES = [
-  { key: "date", label: "日付", required: true },
-  { key: "withdrawal", label: "出金額" },
-  { key: "deposit", label: "入金額" },
-  { key: "amount", label: "入出金（1列・＋−で表現）" },
-  { key: "balance", label: "残高" },
-  { key: "description", label: "摘要（取引内容）" },
+  { key: "date", label: "日付", required: true, color: "#0071e3", tint: "#e7f1fd" },
+  { key: "withdrawal", label: "出金額", color: "#d70015", tint: "#fdecec" },
+  { key: "deposit", label: "入金額", color: "#1d7d3f", tint: "#e7f8ed" },
+  { key: "amount", label: "入出金（1列）", color: "#8944ab", tint: "#f3e9f8" },
+  { key: "balance", label: "残高", color: "#b25000", tint: "#fcefe3" },
+  { key: "description", label: "摘要", color: "#0a7e8c", tint: "#e3f4f6" },
 ];
 const GUESS = {
   date: ["日付", "年月日", "取引日", "お取引日"],
@@ -412,51 +412,166 @@ function guessRoles(columns, headerInFirstRow) {
   return roles;
 }
 
-// ===== マッピングUI =====
+// ===== マッピングUI（プレビュー表＋色つき項目ボタン） =====
+let mapState = null; // { roles: {key:colIndex|null}, active: roleKey|null }
+
 function openMapping(prefillRoles) {
   if (!lastImport) return;
-  const { columns, dataRows } = lastImport;
-  const sample = dataRows[0] || [];
-  mappingFields.innerHTML = "";
-  ROLES.forEach((role) => {
-    const wrap = document.createElement("div");
-    wrap.className = "mapping-field";
-    const label = document.createElement("label");
-    label.textContent = role.label;
-    if (role.required) {
-      const req = document.createElement("span");
-      req.className = "required";
-      req.textContent = "必須";
-      label.appendChild(req);
-    }
-    const sel = document.createElement("select");
-    sel.dataset.role = role.key;
-    const none = document.createElement("option");
-    none.value = "";
-    none.textContent = "（なし）";
-    sel.appendChild(none);
-    columns.forEach((c, i) => {
-      const opt = document.createElement("option");
-      opt.value = String(i);
-      const ex = (sample[i] || "").toString().slice(0, 14);
-      opt.textContent = ex ? `${c}（例: ${ex}）` : c;
-      sel.appendChild(opt);
-    });
-    const pre = prefillRoles ? prefillRoles[role.key] : null;
-    sel.value = pre != null ? String(pre) : "";
-    wrap.appendChild(label);
-    wrap.appendChild(sel);
-    mappingFields.appendChild(wrap);
+  mapState = { roles: {}, active: null };
+  ROLES.forEach((r) => {
+    mapState.roles[r.key] = prefillRoles && prefillRoles[r.key] != null ? prefillRoles[r.key] : null;
   });
+  renderMapping();
   setStatus(mappingStatus, "", "");
   mappingSection.classList.remove("hidden");
   mappingSection.scrollIntoView({ behavior: "smooth", block: "start" });
 }
+
+function roleForColumn(colIndex) {
+  return ROLES.find((r) => mapState.roles[r.key] === colIndex) || null;
+}
+
+function assignColumn(colIndex) {
+  if (!mapState.active) {
+    setStatus(mappingStatus, "先に上の項目ボタン（日付・摘要・出金額など）を選んでください", "error");
+    return;
+  }
+  const role = mapState.active;
+  if (mapState.roles[role] === colIndex) {
+    mapState.roles[role] = null; // 同じ列を再クリックで解除
+  } else {
+    ROLES.forEach((r) => { if (mapState.roles[r.key] === colIndex) mapState.roles[r.key] = null; });
+    mapState.roles[role] = colIndex;
+  }
+  setStatus(mappingStatus, "", "");
+  renderMapping();
+}
+
+function renderMapping() {
+  const { columns, dataRows } = lastImport;
+  mappingFields.innerHTML = "";
+
+  // 項目ボタンのバー
+  const bar = document.createElement("div");
+  bar.className = "role-bar";
+  ROLES.forEach((r) => {
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "role-btn" + (mapState.active === r.key ? " active" : "");
+    btn.style.setProperty("--role-color", r.color);
+    btn.style.setProperty("--role-tint", r.tint);
+
+    const swatch = document.createElement("span");
+    swatch.className = "role-swatch";
+    btn.appendChild(swatch);
+
+    const lbl = document.createElement("span");
+    lbl.className = "role-label";
+    lbl.textContent = r.label + (r.required ? " ＊" : "");
+    btn.appendChild(lbl);
+
+    const assignedCol = mapState.roles[r.key];
+    const assign = document.createElement("span");
+    assign.className = "role-assign";
+    assign.textContent = assignedCol != null ? columns[assignedCol] : "未設定";
+    btn.appendChild(assign);
+
+    if (assignedCol != null) {
+      const x = document.createElement("span");
+      x.className = "role-clear";
+      x.textContent = "✕";
+      x.title = "解除";
+      x.addEventListener("click", (e) => {
+        e.stopPropagation();
+        mapState.roles[r.key] = null;
+        renderMapping();
+      });
+      btn.appendChild(x);
+    }
+
+    btn.addEventListener("click", () => {
+      mapState.active = mapState.active === r.key ? null : r.key;
+      renderMapping();
+    });
+    bar.appendChild(btn);
+  });
+  mappingFields.appendChild(bar);
+
+  // 操作ヒント
+  const tip = document.createElement("p");
+  tip.className = "hint map-tip";
+  if (mapState.active) {
+    const ar = ROLES.find((r) => r.key === mapState.active);
+    tip.textContent = `「${ar.label}」を選択中です。下の表で、この項目にあたる列をクリックしてください（同じ列をもう一度押すと解除）。`;
+  } else {
+    tip.textContent = "上の項目ボタンを選んでから、下の表で対応する列をクリックします。最低限「日付＊」を設定してください。";
+  }
+  mappingFields.appendChild(tip);
+
+  // プレビュー表
+  const wrap = document.createElement("div");
+  wrap.className = "map-table-wrap";
+  const table = document.createElement("table");
+  table.className = "map-table";
+
+  const thead = document.createElement("thead");
+  const htr = document.createElement("tr");
+  const corner = document.createElement("th");
+  corner.className = "map-corner";
+  htr.appendChild(corner);
+  columns.forEach((c, i) => {
+    const th = document.createElement("th");
+    th.className = "map-col-head";
+    const role = roleForColumn(i);
+    if (role) {
+      th.classList.add("assigned");
+      th.style.setProperty("--role-color", role.color);
+      th.style.setProperty("--role-tint", role.tint);
+    }
+    const name = document.createElement("div");
+    name.className = "map-col-name";
+    name.textContent = c;
+    th.appendChild(name);
+    if (role) {
+      const tag = document.createElement("span");
+      tag.className = "map-col-tag";
+      tag.textContent = role.label;
+      th.appendChild(tag);
+    }
+    th.addEventListener("click", () => assignColumn(i));
+    htr.appendChild(th);
+  });
+  thead.appendChild(htr);
+  table.appendChild(thead);
+
+  const tbody = document.createElement("tbody");
+  dataRows.slice(0, 8).forEach((row, ri) => {
+    const tr = document.createElement("tr");
+    const rh = document.createElement("td");
+    rh.className = "map-row-head";
+    rh.textContent = String(ri + 1);
+    tr.appendChild(rh);
+    columns.forEach((c, i) => {
+      const td = document.createElement("td");
+      const role = roleForColumn(i);
+      if (role) {
+        td.classList.add("assigned");
+        td.style.setProperty("--role-tint", role.tint);
+      }
+      td.textContent = row[i] != null ? row[i] : "";
+      td.addEventListener("click", () => assignColumn(i));
+      tr.appendChild(td);
+    });
+    tbody.appendChild(tr);
+  });
+  table.appendChild(tbody);
+  wrap.appendChild(table);
+  mappingFields.appendChild(wrap);
+}
+
 function readMappingRoles() {
   const roles = { date: null, withdrawal: null, deposit: null, amount: null, balance: null, description: null };
-  mappingFields.querySelectorAll("select").forEach((sel) => {
-    roles[sel.dataset.role] = sel.value === "" ? null : Number(sel.value);
-  });
+  if (mapState) ROLES.forEach((r) => { roles[r.key] = mapState.roles[r.key]; });
   return roles;
 }
 function applyMapping() {

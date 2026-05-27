@@ -241,36 +241,124 @@ textarea#paste-area:focus {
   box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
 }
 
-/* ===== マッピング ===== */
-.mapping-fields {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 18px;
+/* ===== マッピング（プレビュー表＋色つきボタン） ===== */
+.map-builder { margin-bottom: 18px; }
+
+.role-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 14px;
 }
-.mapping-field label {
-  display: block;
-  font-size: 0.85rem;
-  margin-bottom: 6px;
-  font-weight: 600;
-  color: var(--muted);
-}
-.mapping-field select {
-  width: 100%;
-  padding: 10px 12px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-input);
-  font-size: 0.92rem;
-  background: var(--fill);
+.role-btn {
+  --role-color: #888;
+  --role-tint: #f0f0f0;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #fff;
+  border: 1.5px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 12px;
+  font-size: 0.88rem;
   cursor: pointer;
-  transition: border-color 0.15s ease, box-shadow 0.15s ease;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
 }
-.mapping-field select:focus {
-  outline: none;
-  border-color: var(--accent);
-  box-shadow: 0 0 0 4px rgba(0, 113, 227, 0.15);
+.role-btn:hover { border-color: var(--role-color); }
+.role-btn.active {
+  border-color: var(--role-color);
+  background: var(--role-tint);
+  box-shadow: 0 0 0 3px rgba(0, 0, 0, 0.05);
 }
-.mapping-field .required { color: #d70015; font-size: 0.76rem; margin-left: 6px; }
+.role-swatch {
+  width: 14px;
+  height: 14px;
+  border-radius: 5px;
+  background: var(--role-color);
+  flex: none;
+}
+.role-label { font-weight: 600; color: var(--text); }
+.role-assign {
+  font-size: 0.78rem;
+  color: var(--muted);
+  background: var(--fill);
+  border-radius: 7px;
+  padding: 2px 9px;
+  max-width: 150px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.role-clear {
+  color: var(--muted);
+  font-size: 0.82rem;
+  padding: 0 3px;
+  border-radius: 5px;
+  line-height: 1;
+}
+.role-clear:hover { color: #d70015; background: #fdecec; }
+
+.map-tip { margin: 0 0 12px; }
+
+.map-table-wrap {
+  overflow: auto;
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+  max-height: 380px;
+}
+table.map-table {
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.85rem;
+  width: 100%;
+}
+.map-table th,
+.map-table td {
+  --role-tint: transparent;
+  border-bottom: 1px solid var(--border-soft);
+  border-right: 1px solid var(--border-soft);
+  padding: 9px 13px;
+  white-space: nowrap;
+  text-align: left;
+  cursor: pointer;
+  background: var(--role-tint);
+}
+.map-table tbody tr:last-child td { border-bottom: none; }
+.map-table th.map-corner,
+.map-table td.map-row-head {
+  position: sticky;
+  left: 0;
+  background: #f0f0f3;
+  color: var(--muted);
+  cursor: default;
+  text-align: center;
+  z-index: 1;
+  border-right: 1px solid var(--border);
+  font-weight: 500;
+}
+.map-table thead th {
+  position: sticky;
+  top: 0;
+  background: #f5f5f7;
+  z-index: 2;
+  vertical-align: top;
+}
+.map-table thead th.map-corner { z-index: 3; }
+.map-table thead th.assigned { background: var(--role-tint); }
+.map-table .map-col-head:hover { filter: brightness(0.97); }
+.map-table .map-col-head.assigned { box-shadow: inset 0 3px 0 var(--role-color); }
+.map-col-name { font-weight: 600; color: var(--text); }
+.map-col-tag {
+  display: inline-block;
+  margin-top: 5px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #fff;
+  background: var(--role-color);
+  border-radius: 980px;
+  padding: 2px 9px;
+}
+.map-table td.assigned { color: var(--text); }
 
 /* ===== ドロップゾーン ===== */
 .dropzone {
