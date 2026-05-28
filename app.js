@@ -1058,15 +1058,12 @@ function renderTable() {
 
 function renderBatches(acc) {
   const batches = Array.isArray(acc.batches) ? acc.batches : [];
-  if (batches.length === 0) {
-    batchesSection.classList.add("hidden");
-    return;
-  }
-  batchesSection.classList.remove("hidden");
   batchesList.innerHTML = "";
+  let shown = 0;
   batches.forEach((b) => {
-    const remaining = acc.transactions.filter((t) => t.batchId === b.id).length;
-    if (remaining === 0) return; // すべて削除済みのバッチは非表示
+    const unsavedCount = acc.transactions.filter((t) => t.batchId === b.id && !t.saved).length;
+    if (unsavedCount === 0) return; // 未保存が残っている取り込みだけ表示
+    shown++;
     const row = document.createElement("div");
     row.className = "batch-row";
 
@@ -1082,7 +1079,7 @@ function renderBatches(acc) {
     meta.appendChild(time);
     const count = document.createElement("span");
     count.className = "batch-count";
-    count.textContent = `現在 ${remaining}件（取り込み時 ${b.addedCount}件）`;
+    count.textContent = `未保存 ${unsavedCount}件（取り込み時 ${b.addedCount}件）`;
     meta.appendChild(count);
     row.appendChild(meta);
 
@@ -1092,18 +1089,18 @@ function renderBatches(acc) {
     del.textContent = "この取り込みを削除";
     del.addEventListener("click", () => {
       const ok = confirm(
-        `「${b.filename}」の取り込み（現在 ${remaining}件）を削除します。\n\n未保存・保存済みの両方から削除されます。元に戻せません。よろしいですか？`
+        `「${b.filename}」の取り込みのうち、未保存 ${unsavedCount}件 を削除します。\n\n保存済み（「3. 加筆後の通帳データ」にあるもの）には影響しません。元に戻せません。よろしいですか？`
       );
       if (!ok) return;
-      acc.transactions = acc.transactions.filter((t) => t.batchId !== b.id);
-      acc.batches = acc.batches.filter((x) => x.id !== b.id);
+      acc.transactions = acc.transactions.filter((t) => !(t.batchId === b.id && !t.saved));
       saveStore();
       renderAll();
     });
     row.appendChild(del);
     batchesList.appendChild(row);
   });
-  if (!batchesList.children.length) batchesSection.classList.add("hidden");
+  if (shown === 0) batchesSection.classList.add("hidden");
+  else batchesSection.classList.remove("hidden");
 }
 
 function formatDateTime(iso) {
