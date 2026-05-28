@@ -194,121 +194,231 @@
       <button type="button" id="help-close" class="drawer-close" title="閉じる">✕</button>
     </div>
     <div class="help-body">
-      <p class="help-lead">このツールは、銀行通帳のCSV／Excelを取り込み、各取引に「区分・物件名・内訳（家賃など）」を付けて、整理済みのデータとして書き出すためのものです。下の順番に沿って操作します。</p>
+      <p class="help-lead">このツールは、銀行通帳のCSV／Excelを取り込み、各取引に「物件名・分類・法人/個人・メモ」を加えて、整理済みのデータとして書き出すためのものです。下の <strong>① 取り込む → ② 確認・分類する → ③ 加筆後データ</strong> の3ステップで進みます。</p>
 
       <div class="help-note">
         <strong>はじめに知っておくこと</strong>
         <ul>
-          <li>入力したデータは<strong>このパソコンのブラウザの中だけ</strong>に保存されます。別のパソコンやブラウザには出てきません。</li>
-          <li>パソコンの買い替えやデータ削除に備えて、ときどき<strong>設定 → バックアップ</strong>でファイルに保存してください。</li>
-          <li>画面は「①取り込む → ②確認・分類する → ③加筆後データ」の3ステップで進みます。</li>
+          <li>入力したデータは<strong>このパソコンのブラウザの中だけ</strong>に保存されます。他のPC・他のブラウザには出てきません。</li>
+          <li>パソコン買い替えや、ブラウザのデータ削除に備えて、ときどき <strong>⚙設定 → バックアップを保存</strong> でファイルに書き出してください。</li>
+          <li>画面の各セクション番号（1./2./3.）が、上の3ステップと対応しています。</li>
         </ul>
       </div>
 
       <section class="help-step">
-        <h3>1. 口座を追加する</h3>
-        <p>画面上の口座タブから操作します。はじめて使うときや口座を増やすときは「＋ 口座を追加」を押し、銀行名・口座番号を入力して「登録」します。</p>
+        <h3>① 口座を追加する</h3>
+        <p>画面上部の口座タブから操作します。はじめての利用や口座を増やすときは <strong>＋ 口座を追加</strong> を押し、銀行名・口座番号を入力して「登録」を押します。</p>
         <div class="help-shot">
-          <div class="account-tabs" style="background:#eef1f5;border-radius:10px;">
-            <button class="acc-tab active" type="button">常陽銀行　普通 3859725</button>
+          <div class="account-tabs" style="background:#eef1f5;border-radius:10px;padding:10px;">
+            <button class="acc-tab active" type="button">三井住友銀行 渋谷支店 普通1234567</button>
+            <button class="acc-tab" type="button">三菱UFJ銀行 新宿支店 普通7654321</button>
+            <button class="acc-tab" type="button">ゆうちょ銀行 普通9876543</button>
             <button class="acc-tab add" type="button">＋ 口座を追加</button>
           </div>
         </div>
-        <p class="help-cap">選択中の口座は青色、エラーがある口座は赤色に「⚠」が付きます。タブを押すと口座を切り替えられます。</p>
+        <p class="help-cap">青色＝選択中。残高がつながらない口座は <span style="color:#b91c1c;font-weight:600;">赤＋⚠</span> 表示。タブを押すと口座を切り替えられます。</p>
       </section>
 
       <section class="help-step">
-        <h3>2. 通帳データを取り込む</h3>
-        <p>「CSV・Excelファイルから」タブで、ファイルをドラッグ＆ドロップするか「ファイルを選択」します。ネットバンキングの画面をコピーして「コピー＆貼り付けから」に貼り付けてもOKです。</p>
+        <h3>② 通帳データを取り込む</h3>
+        <p>「<strong>1. 通帳データを取り込む</strong>」で、CSV/Excelファイルをドラッグ＆ドロップするか「ファイルを選択」を押します。ネットバンキングからコピーした明細を「コピー＆貼り付け」タブに貼って取り込んでもOKです。</p>
         <ul>
-          <li>CSV（文字コードは自動判定）と Excel（.xlsx）に対応しています。</li>
-          <li>「1行目を見出しとして扱う」は、ファイルの先頭行が項目名（日付・金額など）のときにチェックします。</li>
+          <li>対応形式：<strong>CSV</strong>（Shift-JIS / UTF-8 自動判定）／<strong>Excel(.xlsx)</strong></li>
+          <li>「1行目を見出しとして扱う」はファイルの先頭行が項目名（日付・金額など）のときON</li>
+          <li>「取り込む」を押すと <strong>1.セクションは自動で折りたたまれます</strong>（画面を広く使うため）</li>
         </ul>
-        <div class="help-note">銀行ファイルの先頭にある「口座情報・見出しだけの行」は、取引ではないため自動で除外されます。</div>
-      </section>
-
-      <section class="help-step">
-        <h3>3. 列の対応を設定する（はじめの1回）</h3>
-        <p>取り込んだデータの「どの列が何か」を、色つきのボタンと表で対応づけます。上のボタン（例：<span class="role-chip" style="--c:#0071e3">日付</span> <span class="role-chip" style="--c:#0a7e8c">摘要</span> <span class="role-chip" style="--c:#1d7d3f">入金額</span> <span class="role-chip" style="--c:#d70015">出金額</span> <span class="role-chip" style="--c:#b25000">残高</span>）を押してから、下の表で対応する列をクリックします。選んだ列がボタンと同じ色になります。</p>
-        <ul>
-          <li><strong>日付は必須</strong>です。摘要は複数の列を選べます。</li>
-          <li>同じ列をもう一度押すと解除できます。</li>
-          <li>ここで設定した対応はこの口座に記憶され、次回からは自動で適用されます。</li>
-        </ul>
-      </section>
-
-      <section class="help-step">
-        <h3>4. 明細の確認・分類の入力</h3>
-        <p>取引が「1取引＝2行」で表示されます。上段は通帳データ（日付・摘要・物件名・入金・出金・残高）、下段（青い線で一段下がった部分）が入力欄です。</p>
         <div class="help-shot">
-          <div class="tx-detail-inner" style="margin-left:0;">
-            <div class="detail-meta">
-              <span class="dir-badge dir-in">入金</span>
-              <span class="entity-choice seg"><label style="background:#fff;box-shadow:0 1px 3px rgba(0,0,0,.16);font-weight:600;color:#1d1d1f;">法人</label><label>個人</label></span>
-              <div class="tx-field memo-field"><span class="tx-field-label">メモ</span><input type="text" placeholder="メモを入力" readonly></div>
-            </div>
-            <div class="cat-line">
-              <span class="cat-group-label plus">収入(＋)</span>
-              <div class="cat-item"><span class="cat-name">家賃</span><div class="amount-field"><span class="yen">¥</span><input value="60,000" readonly></div></div>
-              <div class="cat-item"><span class="cat-name">クリーニング代</span><div class="amount-field"><span class="yen">¥</span><input value="20,000" readonly></div></div>
-            </div>
-            <div class="cat-line">
-              <span class="cat-group-label minus">控除(−)</span>
-              <div class="cat-item minus"><span class="cat-name">預り敷金の返済</span><div class="amount-field"><span class="yen">−¥</span><input value="30,000" readonly></div></div>
-            </div>
-            <div class="cat-total-line"><span class="cat-total">取引 ¥50,000　収入 ¥80,000 − 控除 ¥30,000 ＝ ¥50,000　差額 <span class="ok">¥0（一致）</span></span></div>
+          <div style="display:flex;align-items:center;justify-content:space-between;background:#fff;border:1px solid var(--border-soft);border-radius:14px;padding:14px 18px;">
+            <strong style="font-size:1.05rem;">1. 通帳データを取り込む</strong>
+            <button class="section-toggle collapsed-state" type="button" style="cursor:default;">
+              <span class="toggle-icon">▶</span>
+              <span class="toggle-label">取り込み欄を表示する</span>
+            </button>
+          </div>
+        </div>
+        <p class="help-cap">折りたたみ中は右に <strong style="color:#fff;background:#d70015;padding:2px 8px;border-radius:980px;font-size:0.78rem;">▶ 取り込み欄を表示する</strong> という赤いボタンが出ます。クリックでもう一度開けます。</p>
+        <div class="help-note">銀行ファイルの先頭にある「口座情報・見出しだけの行」は取引ではないため<strong>自動で除外</strong>されます。同じファイルを再取り込みしても、<strong>重複データは自動で除外</strong>されます。</div>
+      </section>
+
+      <section class="help-step">
+        <h3>列の対応（マッピング）— 各口座ではじめの1回だけ</h3>
+        <p>取り込んだデータの「どの列が何か」を、色つきボタンと表で対応づけます。まず上のボタンを押し、続いて下の表で対応する列をクリック。選んだ列がボタンと同じ色になります。</p>
+        <div class="help-shot">
+          <div class="role-bar">
+            <span class="role-btn" style="--role-color:#0071e3;--role-tint:#e7f1fd;"><span class="role-swatch"></span><span class="role-label">日付 ＊</span><span class="role-assign">取引日</span></span>
+            <span class="role-btn" style="--role-color:#0a7e8c;--role-tint:#e3f4f6;"><span class="role-swatch"></span><span class="role-label">摘要（複数可）</span><span class="role-assign">摘要</span></span>
+            <span class="role-btn" style="--role-color:#1d7d3f;--role-tint:#e7f8ed;"><span class="role-swatch"></span><span class="role-label">入金額</span><span class="role-assign">入金金額（円）</span></span>
+            <span class="role-btn" style="--role-color:#d70015;--role-tint:#fdecec;"><span class="role-swatch"></span><span class="role-label">出金額</span><span class="role-assign">出金金額（円）</span></span>
+            <span class="role-btn" style="--role-color:#b25000;--role-tint:#fcefe3;"><span class="role-swatch"></span><span class="role-label">残高</span><span class="role-assign">残高（円）</span></span>
           </div>
         </div>
         <ul>
-          <li><strong>物件名</strong>（上段）：入力すると「摘要×物件名」を学習し、次回以降に同じ摘要が出たとき自動で入ります。</li>
-          <li><strong>法人／個人</strong>：取引の区分を選びます。</li>
-          <li><strong>収入(＋)</strong>：家賃・ガス代などの収入を金額で入力します（カンマは自動）。</li>
-          <li><strong>控除(−)</strong>：敷金返金など、入金から差し引く項目です。「＋ 控除（−）項目」を押すと入力欄が出ます。</li>
-          <li><strong>差額</strong>：通帳の金額と入力した合計（収入−控除）が一致すると「差額 ¥0（一致）」と緑で表示されます。</li>
-          <li><strong>メモ</strong>：取引ごとに1つ自由に記入できます。</li>
+          <li><strong>日付は必須</strong>。摘要は<strong>複数列</strong>を選べます（自動で連結）</li>
+          <li>同じ列をもう一度押すと解除。<strong>マッピングはこの口座に記憶</strong>され、次回からは自動適用</li>
+          <li>後で間違いに気づいたら「<strong>列の対応を変更する</strong>」ボタンで何度でも直せます（既存データは消えません）</li>
         </ul>
-        <div class="help-note">入金の場合、次に同じ摘要を取り込むと「<strong>法人/個人・物件名・家賃</strong>」が自動でセットされ、その他は空欄になります（毎月変わる項目は都度入力してください）。</div>
       </section>
 
       <section class="help-step">
-        <h3>5. 保存する</h3>
-        <p>入力が終わったら「保存（加筆後の通帳データへ移動）」を押します。確認のうえ、その取引は「2.」の一覧から消え、「3. 加筆後の通帳データ」へ移ります。まだ作業中のものだけが「2.」に残るので分かりやすくなります。</p>
-        <div class="help-shot"><button class="btn btn-primary" type="button">保存（加筆後の通帳データへ移動）</button></div>
-      </section>
+        <h3>③ 明細の確認・分類の入力（メイン作業画面）</h3>
+        <p>「<strong>2. 明細の確認・分類の入力</strong>」では、1取引＝1行のExcel風レイアウトで、一度にたくさんの取引を編集できます。下は表示例です。</p>
+        <div class="help-shot">
+          <table class="mock-table">
+            <thead>
+              <tr class="mock-freeze">
+                <th colspan="8" class="mock-fr-cell">▼  列固定の選択（クリックでその列までを左に固定）</th>
+                <th colspan="5" class="mock-fr-cell">▼</th>
+                <th colspan="3" class="mock-fr-cell">▼</th>
+                <th colspan="3" class="mock-fr-cell">▼</th>
+              </tr>
+              <tr class="mock-group">
+                <th colspan="8"></th>
+                <th colspan="5" class="group-income">入金</th>
+                <th colspan="3" class="group-expense">出金</th>
+                <th colspan="3"></th>
+              </tr>
+              <tr>
+                <th>日付</th><th>摘要</th><th>物件名</th><th>区分</th><th>入金</th><th>出金</th><th>残高</th><th>法/個</th>
+                <th>家賃</th><th>ガス代</th><th>預り敷金</th><th>クリーニング代</th><th>その他</th>
+                <th>預り敷金の返済</th><th>家賃の返金</th><th>ガス代の返金</th>
+                <th>メモ</th><th>差額</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026.5.20</td><td>カトウ ヒロシ</td><td>ヴィラABC 101</td>
+                <td><span class="dir-badge dir-in">入金</span></td>
+                <td class="num">60,000</td><td class="num"></td><td class="num">12,345,678</td>
+                <td>● 法人</td>
+                <td class="num">60,000</td><td class="num"></td><td class="num"></td><td class="num"></td><td class="num"></td>
+                <td class="num control"></td><td class="num control"></td><td class="num control"></td>
+                <td></td><td class="num ok">0</td><td>✕</td>
+              </tr>
+              <tr>
+                <td>2026.5.21</td><td>サトウ アキコ</td><td>パークサイド302</td>
+                <td><span class="dir-badge dir-in">入金</span></td>
+                <td class="num">50,000</td><td class="num"></td><td class="num">12,395,678</td>
+                <td>● 法人</td>
+                <td class="num">60,000</td><td class="num"></td><td class="num"></td><td class="num">20,000</td><td class="num"></td>
+                <td class="num control">30,000</td><td class="num control"></td><td class="num control"></td>
+                <td>敷金返金あり</td><td class="num ok">0</td><td>✕</td>
+              </tr>
+              <tr>
+                <td>2026.5.22</td><td>東京電力</td><td></td>
+                <td><span class="dir-badge dir-out">出金</span></td>
+                <td class="num"></td><td class="num">8,420</td><td class="num">12,387,258</td>
+                <td>● 法人</td>
+                <td class="num control"></td><td class="num control"></td><td class="num control"></td><td class="num control"></td><td class="num control"></td>
+                <td class="num"></td><td class="num"></td><td class="num">8,420</td>
+                <td></td><td class="num ok">0</td><td>✕</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
 
-      <section class="help-step">
-        <h3>6. 加筆後の通帳データ</h3>
-        <p>保存済みのデータがExcelのような表で一覧表示されます（日付・摘要・物件名・入金・出金・残高・法人個人・各分類・メモ）。各行の「編集に戻す」を押すと「2.」に戻して直せます。</p>
-      </section>
-
-      <section class="help-step">
-        <h3>7. 設定（⚙ ボタン）</h3>
+        <h4 class="help-sub">画面の見かた</h4>
         <ul>
-          <li><strong>分類の管理</strong>：内訳に表示する分類（家賃・ガス代など）を入金・出金それぞれで追加・削除できます。</li>
-          <li><strong>ZIPでまとめてダウンロード</strong>：1つのZIPファイルがダウンロードされ、その中に<strong>口座ごとのCSV</strong>が入っています。期間の指定も可能です。</li>
-          <li><strong>バックアップと復元</strong>：データをファイルに書き出し／読み込みできます。別のパソコンへ移すときにも使います。</li>
+          <li><strong>区分</strong>列：取引が <span class="dir-badge dir-in" style="font-size:0.7rem;">入金</span> か <span class="dir-badge dir-out" style="font-size:0.7rem;">出金</span> かを一目で表示</li>
+          <li><strong>物件名</strong>：入力すると <strong>摘要×物件名</strong> を学習。同じ摘要が次回出たとき自動で入ります</li>
+          <li><strong>法/個</strong>：法人／個人ラジオ。<strong>初期値は法人</strong>。摘要ごとに学習され、次回以降は自動セット</li>
+          <li><strong>緑「入金」グループ</strong>の分類列（家賃・ガス代…）：その行が入金 ⇒ <span style="color:#1d7d3f;font-weight:600;">収入(＋)として加算</span>／その行が出金 ⇒ <span style="color:#d70015;font-weight:600;">控除(−)として赤背景</span></li>
+          <li><strong>赤「出金」グループ</strong>の分類列（預り敷金の返済・家賃の返金…）：その行が出金 ⇒ <span style="color:#d70015;font-weight:600;">支出(＋)として加算</span>／その行が入金 ⇒ <span style="color:#1d7d3f;font-weight:600;">控除(−)として赤背景</span></li>
+          <li><strong>差額</strong>列：通帳金額 −（入力合計）。<strong style="color:#1d7d3f;">0（緑）</strong>なら一致、<strong style="color:#d70015;">赤</strong>なら未一致。最終的に全行 0 を目指します</li>
+          <li><strong>金額入力</strong>：数字だけ入力すれば自動で <code>32,000</code> のようにカンマ整形</li>
+          <li><strong>メモ</strong>：取引ごとに1つ自由記入。CSV出力にも含まれます</li>
+        </ul>
+
+        <h4 class="help-sub">便利機能</h4>
+        <ul>
+          <li><strong>列の固定（Excelのウィンドウ枠の固定）</strong>：ヘッダ上の <span class="freeze-btn" style="color:#fff;background:#0071e3;padding:1px 6px;border-radius:4px;display:inline-block;">▼</span> をクリック。その列までが横スクロールしても固定されます。もう一度押すと解除。例：「残高」の▼を押すと日付〜残高までが常に左に見え、分類列のスクロール中も摘要が消えません</li>
+          <li><strong>取り込み履歴の削除</strong>：見出し「2. 明細の確認・分類の入力」の右に <span style="background:#fdecec;color:#b91c1c;border:1px solid #f3b4b4;border-radius:980px;padding:3px 10px;font-size:0.78rem;">未保存の取り込みを削除 ▼</span> が出たらクリック。<strong>未保存分のみ</strong>を取り込み単位でまとめて削除できます（「3. 加筆後の通帳データ」には影響しません）</li>
+          <li><strong>1行削除</strong>：行の右端 ✕ で1取引だけ削除</li>
+        </ul>
+
+        <div class="help-note">
+          <strong>入金の自動入力（学習）</strong><br>
+          入金取引で物件名を登録すると、次回同じ摘要を取り込んだ時に <strong>法人/個人・物件名・家賃</strong> が自動でセットされます。それ以外（ガス代・クリーニング代・控除など、毎月変わる項目）は空欄のまま残ります。
+        </div>
+      </section>
+
+      <section class="help-step">
+        <h3>④ 保存（→ 3. 加筆後の通帳データへ移動）</h3>
+        <p>入力が終わったら下の青ボタンを押します。確認のうえ、保存した取引は「2.」の一覧から消え、「3. 加筆後の通帳データ」へ移ります。</p>
+        <div class="help-shot"><button class="btn btn-primary" type="button" style="cursor:default;">保存（加筆後の通帳データへ移動）</button></div>
+        <p class="help-cap">「2.」には未保存（作業中）の取引だけが残るので、作業対象がスッキリします。</p>
+      </section>
+
+      <section class="help-step">
+        <h3>⑤ 加筆後の通帳データ</h3>
+        <p>「<strong>3. 加筆後の通帳データ</strong>」で保存済みの全データをExcel風に一覧表示。<strong>控除（差し引き）はマイナス表示</strong>になります。</p>
+        <div class="help-shot">
+          <table class="mock-table">
+            <thead>
+              <tr>
+                <th>日付</th><th>摘要</th><th>物件名</th><th>区分</th>
+                <th>入金</th><th>出金</th><th>残高</th><th>法人/個人</th>
+                <th>家賃</th><th>クリーニング代</th><th>預り敷金の返済</th><th>ガス代の返金</th><th>メモ</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>2026.5.20</td><td>カトウ ヒロシ</td><td>ヴィラABC 101</td>
+                <td><span class="dir-badge dir-in">入金</span></td>
+                <td class="num">60,000</td><td class="num"></td><td class="num">12,345,678</td><td>法人</td>
+                <td class="num">60,000</td><td class="num"></td><td class="num"></td><td class="num"></td><td></td>
+                <td><button class="btn back-btn" type="button" style="cursor:default;">編集に戻す</button></td>
+              </tr>
+              <tr>
+                <td>2026.5.21</td><td>サトウ アキコ</td><td>パークサイド302</td>
+                <td><span class="dir-badge dir-in">入金</span></td>
+                <td class="num">50,000</td><td class="num"></td><td class="num">12,395,678</td><td>法人</td>
+                <td class="num">60,000</td><td class="num">20,000</td><td class="num" style="color:#b91c1c;">-30,000</td><td class="num"></td><td>敷金返金あり</td>
+                <td><button class="btn back-btn" type="button" style="cursor:default;">編集に戻す</button></td>
+              </tr>
+              <tr>
+                <td>2026.5.22</td><td>東京電力</td><td></td>
+                <td><span class="dir-badge dir-out">出金</span></td>
+                <td class="num"></td><td class="num">8,420</td><td class="num">12,387,258</td><td>法人</td>
+                <td class="num"></td><td class="num"></td><td class="num"></td><td class="num">8,420</td><td></td>
+                <td><button class="btn back-btn" type="button" style="cursor:default;">編集に戻す</button></td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+        <p class="help-cap">「編集に戻す」を押すと、その行が「2.」へ戻り、もう一度編集できます。</p>
+      </section>
+
+      <section class="help-step">
+        <h3>⚙ 設定パネル</h3>
+        <p>画面右上の <strong>⚙設定</strong> ボタンから開きます（右からスライドして表示されます）。</p>
+        <ul>
+          <li><strong>分類の管理</strong>：入金・出金それぞれの分類（家賃・ガス代…）を追加／削除できます。チップの「✕」で削除、欄に名前を入れて「追加」</li>
+          <li><strong>ZIPでまとめてダウンロード</strong>：1つのZIPファイルがダウンロードされ、その中に<strong>口座ごとのCSV</strong>が入っています。期間も指定可能。CSVはBOM付きUTF-8で<strong>Excelでそのまま開けます</strong></li>
+          <li><strong>バックアップと復元</strong>：データをJSONファイルで書き出し／読み込み。別PCへの移行や、PC買い替え対策に</li>
         </ul>
       </section>
 
       <section class="help-step">
-        <h3>8. 残高がつながらないとき（取り込み漏れ）</h3>
-        <p>通帳の残高が連続していない（前の残高＋入出金＝次の残高にならない）場合、取り込み漏れの可能性があります。次のような警告が画面上部に出て、該当の口座タブが赤くなり「⚠」が付きます。</p>
+        <h3>残高がつながらないとき（取り込み漏れ警告）</h3>
+        <p>残高列の連続性を自動チェック。「前の残高 ＋ 入金 − 出金 ＝ 次の残高」にならない箇所があると、画面上部に警告が出ます。</p>
         <div class="help-shot">
           <div class="balance-alert" style="position:static;">
             <strong>⚠ 残高がつながっていません（通帳の取り込み漏れの可能性）</strong>
             <div>4月28日から5月2日にかけての残高が合いません。その期間の通帳をアップロードしてください。</div>
           </div>
         </div>
-        <p class="help-cap">不足している期間の通帳を追加で取り込むと、警告は自動的に消えます。</p>
+        <p class="help-cap">該当の口座タブも赤くなり「⚠」が付きます。不足期間の通帳を追加で取り込むと、警告は自動で消えます。</p>
       </section>
 
       <div class="help-note">
-        <strong>注意点</strong>
+        <strong>よくある注意点・ヒント</strong>
         <ul>
-          <li>同じファイルをもう一度取り込んでも、<strong>重複分は自動で除外</strong>されます（二重登録されません）。</li>
-          <li>データはブラウザごとに別々です。会社PCと自宅PCなどで共有したいときは「バックアップ → 復元」を使ってください。</li>
-          <li>「✕」での行削除や「この口座を削除」は元に戻せません。ご注意ください。</li>
-          <li>大事なデータは定期的にバックアップを取りましょう。</li>
+          <li>同じファイルを再取り込みしても <strong>重複は自動で除外</strong></li>
+          <li>データはブラウザごとに別々です。会社PCと自宅PCで共有したいときは「バックアップ → 復元」を使ってください</li>
+          <li>「✕」での行削除や「この口座を削除」は <strong>元に戻せません</strong></li>
+          <li>定期的にバックアップを取りましょう</li>
+          <li>列マッピングを間違えたかも？と思ったら「<strong>列の対応を変更する</strong>」で何度でも直せます（既存データは消えません）</li>
+          <li>取り込み欄を再度開きたいときは、見出し右の <strong style="color:#fff;background:#d70015;padding:2px 10px;border-radius:980px;">▶ 取り込み欄を表示する</strong> をクリック</li>
         </ul>
       </div>
     </div>

@@ -1095,3 +1095,51 @@ main { max-width: min(1640px, calc(100vw - 32px)); padding: 0 16px; }
 
 /* グループ行を挟むので、header-rowのstickyトップを下げる */
 #data-table thead tr.header-row th { top: 46px; }
+
+/* ===== 操作説明書：実画面風の表ミニチュア ===== */
+.help-modal { width: min(1080px, 94vw); }
+.help-shot { overflow-x: auto; }
+.help-sub { margin: 16px 0 6px; font-size: 0.95rem; }
+
+.help-shot .mock-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.74rem;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  overflow: hidden;
+  background: #fff;
+  min-width: 980px;
+}
+.help-shot .mock-table th,
+.help-shot .mock-table td {
+  padding: 4px 6px;
+  border-right: 1px solid var(--border-soft);
+  border-bottom: 1px solid var(--border-soft);
+  white-space: nowrap;
+  text-align: center;
+  background: #fff;
+  color: var(--text);
+}
+.help-shot .mock-table tbody tr:last-child td { border-bottom: none; }
+.help-shot .mock-table thead th {
+  background: #f5f5f7;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+.help-shot .mock-table thead .mock-freeze .mock-fr-cell {
+  background: #ebebee;
+  color: var(--muted);
+  font-size: 0.68rem;
+  padding: 2px 4px;
+}
+.help-shot .mock-table thead .group-income {
+  background: #e7f8ed; color: #1d7d3f; font-weight: 700; letter-spacing: 0.06em;
+}
+.help-shot .mock-table thead .group-expense {
+  background: #fdecec; color: #d70015; font-weight: 700; letter-spacing: 0.06em;
+}
+.help-shot .mock-table td.num { text-align: right; font-variant-numeric: tabular-nums; }
+.help-shot .mock-table td.control { background: #fff5f5; }
+.help-shot .mock-table td.ok { color: #1d7d3f; font-weight: 600; }
