@@ -940,7 +940,7 @@ tr.tx-detail:hover > td { background: #fafafc; }
 #data-table .col-balance { min-width: 86px; text-align: right; }
 #data-table .col-entity { min-width: 56px; }
 #data-table .col-cat { min-width: 86px; }
-#data-table .col-memo { min-width: 130px; }
+#data-table .col-memo { min-width: 260px; }
 #data-table .col-diff { min-width: 84px; }
 #data-table .col-del { min-width: 32px; }
 
