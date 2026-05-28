@@ -44,39 +44,43 @@
 
     <!-- 1. 取り込む -->
     <section id="import-section" class="card hidden">
-      <h2>1. 通帳データを取り込む</h2>
-
-      <div class="tabs">
-        <button type="button" class="tab active" data-tab="file">CSV・Excelファイルから</button>
-        <button type="button" class="tab" data-tab="paste">コピー＆貼り付けから</button>
+      <div class="section-head">
+        <h2>1. 通帳データを取り込む</h2>
+        <button type="button" id="import-toggle" class="section-toggle" title="折りたたみ/展開">▼</button>
       </div>
-
-      <div id="tab-file" class="tab-panel">
-        <div id="dropzone" class="dropzone">
-          <p>ここにCSV・Excel(.xlsx)ファイルをドラッグ＆ドロップ</p>
-          <p>または</p>
-          <label class="btn">
-            ファイルを選択
-            <input type="file" id="file-input" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
-          </label>
-          <p class="hint">CSV（Shift-JIS / UTF-8）と Excel（.xlsx）に対応しています</p>
+      <div class="section-body">
+        <div class="tabs">
+          <button type="button" class="tab active" data-tab="file">CSV・Excelファイルから</button>
+          <button type="button" class="tab" data-tab="paste">コピー＆貼り付けから</button>
         </div>
-      </div>
 
-      <div id="tab-paste" class="tab-panel hidden">
-        <p class="hint">ネットバンキングの取引明細をマウスでドラッグして選択しコピー（Ctrl+C）し、下の欄に貼り付け（Ctrl+V）て「取り込む」を押してください。</p>
-        <textarea id="paste-area" rows="8" placeholder="ここに取引明細を貼り付け..."></textarea>
-        <button type="button" id="paste-btn" class="btn btn-primary">取り込む</button>
-      </div>
+        <div id="tab-file" class="tab-panel">
+          <div id="dropzone" class="dropzone">
+            <p>ここにCSV・Excel(.xlsx)ファイルをドラッグ＆ドロップ</p>
+            <p>または</p>
+            <label class="btn">
+              ファイルを選択
+              <input type="file" id="file-input" accept=".csv,text/csv,.xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+            </label>
+            <p class="hint">CSV（Shift-JIS / UTF-8）と Excel（.xlsx）に対応しています</p>
+          </div>
+        </div>
 
-      <label class="checkbox">
-        <input type="checkbox" id="has-header" checked>
-        1行目を見出し（項目名）として扱う
-      </label>
-      <div class="btn-row" style="margin-top:10px;">
-        <button type="button" id="remap-btn" class="btn hidden">列の対応を変更する</button>
+        <div id="tab-paste" class="tab-panel hidden">
+          <p class="hint">ネットバンキングの取引明細をマウスでドラッグして選択しコピー（Ctrl+C）し、下の欄に貼り付け（Ctrl+V）て「取り込む」を押してください。</p>
+          <textarea id="paste-area" rows="8" placeholder="ここに取引明細を貼り付け..."></textarea>
+          <button type="button" id="paste-btn" class="btn btn-primary">取り込む</button>
+        </div>
+
+        <label class="checkbox">
+          <input type="checkbox" id="has-header" checked>
+          1行目を見出し（項目名）として扱う
+        </label>
+        <div class="btn-row" style="margin-top:10px;">
+          <button type="button" id="remap-btn" class="btn hidden">列の対応を変更する</button>
+        </div>
+        <p id="file-status" class="status"></p>
       </div>
-      <p id="file-status" class="status"></p>
     </section>
 
     <!-- 1.5 列の対応（マッピング） -->
@@ -91,17 +95,19 @@
       <p id="mapping-status" class="status"></p>
     </section>
 
-    <!-- 取り込み履歴（未処理の取り込みがあるときだけ表示） -->
-    <section id="batches-section" class="card hidden">
-      <h2>取り込み履歴</h2>
-      <p class="hint">アップロードしたファイルが間違っていた場合は、その取り込み回ごと未保存分をまとめて削除できます。<strong>「3. 加筆後の通帳データ」（保存済み）には影響しません。</strong>すべて保存してこの一覧が空になると、この欄は自動的に非表示になります。</p>
-      <div id="batches-list" class="batches-list"></div>
-    </section>
-
     <!-- 2. 明細の確認・分類入力 -->
     <section id="edit-section" class="card hidden">
-      <h2>2. 明細の確認・分類の入力</h2>
-      <p class="hint"><span id="row-summary"></span>　各行で「法人／個人」を選び、内訳（家賃・ガス代・預り敷金など）の金額を入力してください。入力が終わったら下の「保存」ボタンを押してください。</p>
+      <div class="section-head">
+        <h2>2. 明細の確認・分類の入力</h2>
+        <div class="section-head-actions">
+          <button type="button" id="batches-trigger" class="batches-trigger hidden">未保存の取り込みを削除 ▼</button>
+          <div id="batches-popover" class="batches-popover hidden">
+            <p class="hint" style="margin:0 0 8px;">アップロード単位で未保存分をまとめて削除できます。<strong>3. 加筆後の通帳データには影響しません。</strong></p>
+            <div id="batches-list" class="batches-list"></div>
+          </div>
+        </div>
+      </div>
+      <p class="hint"><span id="row-summary"></span>　各行で「法人／個人」を選び、内訳（家賃・ガス代・預り敷金など）の金額を入力してください。ヘッダ上の▼で列の固定位置を変えられます。入力後は下の「保存」ボタンを押してください。</p>
       <div class="table-wrap">
         <table id="data-table">
           <thead></thead>

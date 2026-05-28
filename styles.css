@@ -946,3 +946,95 @@ tr.tx-detail:hover > td { background: #fafafc; }
 
 /* 数値の右寄せ（カテゴリ列はinput側で右寄せ） */
 #data-table td.num { text-align: right; }
+
+/* ===== カードの見出しと折りたたみ ===== */
+.section-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.section-head h2 { margin: 0; }
+.section-head-actions { position: relative; display: flex; gap: 8px; align-items: center; }
+
+.section-toggle {
+  background: rgba(0, 0, 0, 0.05);
+  border: none;
+  width: 28px;
+  height: 28px;
+  border-radius: 980px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  color: var(--muted);
+  transition: transform 0.2s ease, background 0.15s ease;
+}
+.section-toggle:hover { background: rgba(0, 0, 0, 0.09); color: var(--text); }
+.collapsed > .section-body { display: none; }
+.collapsed .section-toggle { transform: rotate(-90deg); }
+
+/* ===== 取り込み履歴ポップオーバー ===== */
+.batches-trigger {
+  background: #fdecec;
+  color: #b91c1c;
+  border: 1px solid #f3b4b4;
+  border-radius: 980px;
+  padding: 5px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+.batches-trigger:hover { background: #fbdcdc; }
+.batches-popover {
+  position: absolute;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 380px;
+  max-width: 88vw;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.18);
+  padding: 14px;
+  z-index: 20;
+}
+
+/* ===== 法人/個人 ラジオ ===== */
+.entity-radios { display: inline-flex; gap: 8px; align-items: center; }
+.entity-radio { display: inline-flex; align-items: center; gap: 3px; font-size: 0.76rem; cursor: pointer; white-space: nowrap; }
+.entity-radio input { margin: 0; transform: scale(0.95); }
+#data-table .col-entity { min-width: 108px; }
+
+/* ===== 列固定 ===== */
+#data-table thead tr.freeze-row th {
+  position: sticky;
+  top: 0;
+  height: 22px;
+  padding: 1px 2px;
+  background: #ebebee;
+  border-bottom: 1px solid var(--border-soft);
+  z-index: 4;
+  text-align: center;
+}
+#data-table thead tr.header-row th {
+  position: sticky;
+  top: 22px;
+  z-index: 3;
+}
+.freeze-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  color: #c7c7cc;
+  font-size: 0.62rem;
+  padding: 0 3px;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1;
+}
+.freeze-btn:hover { color: var(--accent); background: rgba(0, 113, 227, 0.08); }
+.freeze-btn.active { color: #fff; background: var(--accent); border-color: var(--accent); }
+
+#data-table .frozen-col {
+  position: sticky;
+  z-index: 2;
+  background: #fff;
+}
+#data-table thead tr.freeze-row th.frozen-col { background: #ebebee; z-index: 6; }
+#data-table thead tr.header-row th.frozen-col { background: #f5f5f7; z-index: 5; }
+#data-table tbody tr:hover td.frozen-col { background: #f5f8ff; }
+#data-table .freeze-divider { box-shadow: inset -2px 0 0 var(--accent); }

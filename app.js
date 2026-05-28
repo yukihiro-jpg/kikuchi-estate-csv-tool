@@ -145,7 +145,9 @@ const finalTableHead = document.querySelector("#final-table thead");
 const finalTableBody = document.querySelector("#final-table tbody");
 const finalSummary = $("final-summary");
 
-const batchesSection = $("batches-section");
+const importToggle = $("import-toggle");
+const batchesTrigger = $("batches-trigger");
+const batchesPopover = $("batches-popover");
 const batchesList = $("batches-list");
 
 const settingsDrawer = $("settings-drawer");
@@ -455,7 +457,8 @@ function renderAll() {
   if (inNew) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
-    batchesSection.classList.add("hidden");
+    batchesTrigger.classList.add("hidden");
+    batchesPopover.classList.add("hidden");
     balanceAlert.classList.add("hidden");
   } else {
     renderTable();
@@ -714,6 +717,7 @@ function startImport(records, sourceLabel) {
     renderTable();
     remapBtn.classList.remove("hidden");
     setStatus(fileStatus, importMessage(res, acc), "ok");
+    if (res.added > 0) importSection.classList.add("collapsed");
   } else {
     openMapping(guessRoles(lastImport.columns, lastImport.hasHeader));
   }
@@ -980,6 +984,7 @@ function applyMapping() {
   remapBtn.classList.remove("hidden");
   renderTable();
   setStatus(fileStatus, importMessage(res, acc), "ok");
+  if (res.added > 0) importSection.classList.add("collapsed");
 }
 
 // ===== 重複判定 =====
@@ -1024,7 +1029,7 @@ function mergeIntoAccount(acc, dataRows, roles, batchId) {
 // 入金：区分（法人/個人）・物件名・「家賃（収入）」をセットし、他の内訳は空欄
 // 出金：従来どおり（区分・物件名・内訳すべて）
 function applyLearned(learned, dir) {
-  if (!learned) return { entity: "", property: "", items: [] };
+  if (!learned) return { entity: "法人", property: "", items: [] };
   if (dir === "入金") {
     const rent = (learned.items || []).find((it) => it.category === "家賃" && (it.cdir || "入金") === "入金");
     const items = rent && String(rent.amount).trim() !== ""
@@ -1045,7 +1050,8 @@ function renderTable() {
   if (!acc || !acc.mapping) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
-    batchesSection.classList.add("hidden");
+    batchesTrigger.classList.add("hidden");
+    batchesPopover.classList.add("hidden");
     balanceAlert.classList.add("hidden");
     return;
   }
@@ -1099,8 +1105,12 @@ function renderBatches(acc) {
     row.appendChild(del);
     batchesList.appendChild(row);
   });
-  if (shown === 0) batchesSection.classList.add("hidden");
-  else batchesSection.classList.remove("hidden");
+  if (shown === 0) {
+    batchesTrigger.classList.add("hidden");
+    batchesPopover.classList.add("hidden");
+  } else {
+    batchesTrigger.classList.remove("hidden");
+  }
 }
 
 function formatDateTime(iso) {
@@ -1131,6 +1141,8 @@ function renderBalanceAlert(acc) {
 }
 
 // 「2. 明細の確認・分類の入力」＝未保存の取引のみ（1取引＝1行のExcel風）
+let freezeAt = 0; // 固定する列数（0=固定なし）
+
 function renderEditTable(acc, roles) {
   const unsaved = acc.transactions.filter((t) => !t.saved);
   if (unsaved.length === 0) {
@@ -1141,10 +1153,31 @@ function renderEditTable(acc, roles) {
   rowSummary.textContent = `未保存：${unsaved.length}件`;
 
   const cols = editColumns(roles, acc);
+  if (freezeAt > cols.length) freezeAt = 0;
 
-  // ヘッダ
+  // ヘッダ：固定位置選択行（▼）＋見出し行
   tableHead.innerHTML = "";
+  const freezeRow = document.createElement("tr");
+  freezeRow.className = "freeze-row";
+  cols.forEach((c, i) => {
+    const th = document.createElement("th");
+    th.classList.add("col-" + c.key);
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "freeze-btn" + (freezeAt === i + 1 ? " active" : "");
+    btn.textContent = "▼";
+    btn.title = freezeAt === i + 1 ? "列の固定を解除" : `この列までを固定（${i + 1}列）`;
+    btn.addEventListener("click", () => {
+      freezeAt = freezeAt === i + 1 ? 0 : i + 1;
+      renderEditTable(acc, roles);
+    });
+    th.appendChild(btn);
+    freezeRow.appendChild(th);
+  });
+  tableHead.appendChild(freezeRow);
+
   const headRow = document.createElement("tr");
+  headRow.className = "header-row";
   cols.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c.label;
@@ -1162,13 +1195,50 @@ function renderEditTable(acc, roles) {
 
   // 本体
   tableBody.innerHTML = "";
+  let entityChanged = false;
   acc.transactions.forEach((tx) => {
     if (tx.saved) return;
     if (!tx.items) tx.items = [];
-    if (tx.entity == null) tx.entity = "";
+    if (tx.entity !== "法人" && tx.entity !== "個人") {
+      tx.entity = "法人"; // 初期値は法人
+      entityChanged = true;
+    }
     const dir = dirOf(roles, tx.cells);
     if (dir) normalizeItemDirs(tx, dir);
     tableBody.appendChild(buildEditRow(acc, tx, dir, cols));
+  });
+  if (entityChanged) saveStore();
+
+  applyFreeze();
+}
+
+// 列固定：先頭からN列を position:sticky で固定し、見出しと本体の各セルに left オフセットを設定
+function applyFreeze() {
+  const table = document.getElementById("data-table");
+  if (!table) return;
+  table.querySelectorAll(".frozen-col, .freeze-divider").forEach((el) => {
+    el.classList.remove("frozen-col", "freeze-divider");
+    el.style.left = "";
+  });
+  if (freezeAt <= 0) return;
+  // 1取引＝1行の見出し行（header-row）でセル幅を測る
+  const headerCells = table.querySelectorAll("thead tr.header-row > th");
+  if (headerCells.length === 0) return;
+  const widths = [];
+  for (let i = 0; i < freezeAt && i < headerCells.length; i++) {
+    widths.push(headerCells[i].getBoundingClientRect().width);
+  }
+  const allRows = table.querySelectorAll("thead tr, tbody tr");
+  allRows.forEach((tr) => {
+    let offset = 0;
+    for (let i = 0; i < freezeAt; i++) {
+      const cell = tr.children[i];
+      if (!cell) continue;
+      cell.classList.add("frozen-col");
+      cell.style.left = offset + "px";
+      if (i === freezeAt - 1) cell.classList.add("freeze-divider");
+      offset += widths[i] || 0;
+    }
   });
 }
 
@@ -1246,10 +1316,12 @@ function buildEditRow(acc, tx, dir, cols) {
       case "balance":
         td.textContent = roles.balance != null ? fmtNum(tx.cells[roles.balance]) : "";
         break;
-      case "entity":
-        td.appendChild(buildEntitySelect(acc, tx, dir));
+      case "entity": {
+        const rowKey = acc.id + "_" + acc.transactions.indexOf(tx);
+        td.appendChild(buildEntityRadios(acc, tx, dir, rowKey));
         td.classList.add("center");
         break;
+      }
       case "cat": {
         if (dir && c.home !== dir) td.classList.add("control-cell");
         const inp = document.createElement("input");
@@ -1298,22 +1370,28 @@ function buildEditRow(acc, tx, dir, cols) {
   return tr;
 }
 
-function buildEntitySelect(acc, tx, dir) {
-  const sel = document.createElement("select");
-  sel.className = "entity-select";
-  [["", "—"], ["法人", "法人"], ["個人", "個人"]].forEach(([v, label]) => {
-    const o = document.createElement("option");
-    o.value = v;
-    o.textContent = label;
-    if (tx.entity === v) o.selected = true;
-    sel.appendChild(o);
+function buildEntityRadios(acc, tx, dir, rowKey) {
+  const wrap = document.createElement("span");
+  wrap.className = "entity-radios";
+  const current = tx.entity || "法人"; // 未設定は法人を初期選択
+  ["法人", "個人"].forEach((v) => {
+    const lab = document.createElement("label");
+    lab.className = "entity-radio";
+    const rb = document.createElement("input");
+    rb.type = "radio";
+    rb.name = "ent_" + rowKey;
+    rb.value = v;
+    rb.checked = current === v;
+    rb.addEventListener("change", () => {
+      tx.entity = v;
+      if (dir) learnFromTx(acc, tx, dir);
+      saveStore();
+    });
+    lab.appendChild(rb);
+    lab.appendChild(document.createTextNode(v));
+    wrap.appendChild(lab);
   });
-  sel.addEventListener("change", () => {
-    tx.entity = sel.value;
-    if (dir) learnFromTx(acc, tx, dir);
-    saveStore();
-  });
-  return sel;
+  return wrap;
 }
 
 function buildMemoInput(tx) {
@@ -1984,10 +2062,27 @@ helpBtn.addEventListener("click", openHelp);
 helpClose.addEventListener("click", closeHelp);
 helpOverlay.addEventListener("click", closeHelp);
 
+// 取り込みセクション 折りたたみ
+function collapseImport() { importSection.classList.add("collapsed"); }
+function expandImport() { importSection.classList.remove("collapsed"); }
+importToggle.addEventListener("click", () => importSection.classList.toggle("collapsed"));
+
+// 取り込み履歴ポップオーバー
+batchesTrigger.addEventListener("click", (e) => {
+  e.stopPropagation();
+  batchesPopover.classList.toggle("hidden");
+});
+document.addEventListener("click", (e) => {
+  if (batchesPopover.classList.contains("hidden")) return;
+  if (batchesPopover.contains(e.target) || e.target === batchesTrigger) return;
+  batchesPopover.classList.add("hidden");
+});
+
 document.addEventListener("keydown", (e) => {
   if (e.key !== "Escape") return;
   if (settingsDrawer.classList.contains("open")) closeSettings();
   if (!helpModal.classList.contains("hidden")) closeHelp();
+  if (!batchesPopover.classList.contains("hidden")) batchesPopover.classList.add("hidden");
 });
 
 editSave.addEventListener("click", () => {
@@ -2059,3 +2154,4 @@ migrateLegacyBatches();
 populateRange();
 renderCategorySettings();
 renderAll();
+window.addEventListener("resize", () => applyFreeze());
