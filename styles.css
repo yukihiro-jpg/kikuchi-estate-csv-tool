@@ -1074,3 +1074,24 @@ main { max-width: min(1640px, calc(100vw - 32px)); padding: 0 16px; }
 #data-table tbody .cat-input,
 #data-table tbody .memo-input,
 #data-table tbody .row-property { padding: 2px 6px; }
+
+/* ===== 入金/出金 グループ見出し行 ===== */
+#data-table thead tr.group-row th {
+  position: sticky;
+  top: 22px;
+  height: 24px;
+  padding: 2px 8px;
+  font-size: 0.78rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-align: center;
+  border-bottom: 1px solid var(--border-soft);
+  background: #f5f5f7;
+  z-index: 4;
+}
+#data-table thead tr.group-row th.group-income { background: #e7f8ed; color: #1d7d3f; }
+#data-table thead tr.group-row th.group-expense { background: #fdecec; color: #d70015; }
+#data-table thead tr.group-row th.group-empty { background: #f5f5f7; color: transparent; }
+
+/* グループ行を挟むので、header-rowのstickyトップを下げる */
+#data-table thead tr.header-row th { top: 46px; }

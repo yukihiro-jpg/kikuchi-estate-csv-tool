@@ -1183,6 +1183,45 @@ function renderEditTable(acc, roles) {
   });
   tableHead.appendChild(freezeRow);
 
+  // グループ見出し行（入金カテゴリと出金カテゴリの上に大見出しを表示）
+  const groupRow = document.createElement("tr");
+  groupRow.className = "group-row";
+  let gi = 0;
+  let pre = 0;
+  while (gi < cols.length && cols[gi].key !== "cat") { gi++; pre++; }
+  if (pre > 0) {
+    const t = document.createElement("th");
+    t.className = "group-empty";
+    t.colSpan = pre;
+    groupRow.appendChild(t);
+  }
+  let incomeSpan = 0;
+  while (gi < cols.length && cols[gi].key === "cat" && cols[gi].home === "入金") { gi++; incomeSpan++; }
+  if (incomeSpan > 0) {
+    const t = document.createElement("th");
+    t.className = "group-income";
+    t.colSpan = incomeSpan;
+    t.textContent = "入金";
+    groupRow.appendChild(t);
+  }
+  let expenseSpan = 0;
+  while (gi < cols.length && cols[gi].key === "cat" && cols[gi].home === "出金") { gi++; expenseSpan++; }
+  if (expenseSpan > 0) {
+    const t = document.createElement("th");
+    t.className = "group-expense";
+    t.colSpan = expenseSpan;
+    t.textContent = "出金";
+    groupRow.appendChild(t);
+  }
+  const post = cols.length - gi;
+  if (post > 0) {
+    const t = document.createElement("th");
+    t.className = "group-empty";
+    t.colSpan = post;
+    groupRow.appendChild(t);
+  }
+  tableHead.appendChild(groupRow);
+
   const headRow = document.createElement("tr");
   headRow.className = "header-row";
   cols.forEach((c) => {
@@ -1260,17 +1299,23 @@ function editColumns(roles, acc) {
   if (roles.withdrawal != null || roles.amount != null) arr.push({ key: "withdrawal", label: "出金", num: true });
   if (roles.balance != null) arr.push({ key: "balance", label: "残高", num: true });
   arr.push({ key: "entity", label: "法/個" });
+
+  // 分類列：入金カテゴリ → 出金カテゴリ の順でまとめる
   const seen = new Set();
-  const pushCat = (cat, home) => {
-    if (!cat || seen.has(cat)) return;
-    seen.add(cat);
-    arr.push({ key: "cat", category: cat, home, label: cat, num: true });
-  };
-  store.categories["入金"].forEach((c) => pushCat(c, "入金"));
-  store.categories["出金"].forEach((c) => pushCat(c, "出金"));
+  const incomeCats = [];
+  const expenseCats = [];
+  store.categories["入金"].forEach((c) => { if (!seen.has(c)) { seen.add(c); incomeCats.push(c); } });
+  store.categories["出金"].forEach((c) => { if (!seen.has(c)) { seen.add(c); expenseCats.push(c); } });
   acc.transactions.forEach((t) => {
-    (t.items || []).forEach((it) => pushCat(it.category, it.cdir || "入金"));
+    (t.items || []).forEach((it) => {
+      if (!it.category || seen.has(it.category)) return;
+      seen.add(it.category);
+      ((it.cdir || "入金") === "入金" ? incomeCats : expenseCats).push(it.category);
+    });
   });
+  incomeCats.forEach((c) => arr.push({ key: "cat", category: c, home: "入金", label: c, num: true }));
+  expenseCats.forEach((c) => arr.push({ key: "cat", category: c, home: "出金", label: c, num: true }));
+
   arr.push({ key: "memo", label: "メモ" });
   arr.push({ key: "diff", label: "差額", num: true });
   arr.push({ key: "del", label: "" });
