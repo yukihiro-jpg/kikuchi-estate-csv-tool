@@ -68,6 +68,29 @@ function cleanupBlankTransactions() {
   if (removed > 0) saveStore();
 }
 
+// 既存取引（batchIdなし）を「以前の取り込み」としてひとまとめにし、履歴から削除できるようにする
+function migrateLegacyBatches() {
+  let touched = false;
+  store.accounts.forEach((acc) => {
+    if (!Array.isArray(acc.transactions) || acc.transactions.length === 0) return;
+    const legacy = acc.transactions.filter((t) => !t.batchId);
+    if (legacy.length === 0) return;
+    const legacyId = "legacy_" + acc.id;
+    legacy.forEach((t) => { t.batchId = legacyId; });
+    if (!Array.isArray(acc.batches)) acc.batches = [];
+    if (!acc.batches.some((b) => b.id === legacyId)) {
+      acc.batches.push({
+        id: legacyId,
+        filename: "以前の取り込み（履歴記録前）",
+        importedAt: null,
+        addedCount: legacy.length,
+      });
+    }
+    touched = true;
+  });
+  if (touched) saveStore();
+}
+
 function categoriesForTx(dir, tx) {
   const base = categoryOptions(dir).slice();
   (tx.items || []).forEach((it) => {
@@ -1055,7 +1078,7 @@ function renderBatches(acc) {
     meta.appendChild(name);
     const time = document.createElement("span");
     time.className = "batch-time";
-    time.textContent = formatDateTime(b.importedAt);
+    time.textContent = b.importedAt ? formatDateTime(b.importedAt) : "(日時不明)";
     meta.appendChild(time);
     const count = document.createElement("span");
     count.className = "batch-count";
@@ -1909,6 +1932,7 @@ if (store.accounts.length === 0) {
 }
 ensureCategories();
 cleanupBlankTransactions();
+migrateLegacyBatches();
 populateRange();
 renderCategorySettings();
 renderAll();
