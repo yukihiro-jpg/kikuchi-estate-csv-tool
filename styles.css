@@ -875,3 +875,74 @@ tr.tx-detail:hover > td { background: #fafafc; }
 .batch-name { font-size: 0.95rem; word-break: break-all; }
 .batch-time { font-size: 0.78rem; color: var(--muted); }
 .batch-count { font-size: 0.82rem; color: var(--muted); }
+
+/* ===== 明細編集テーブル（1取引＝1行・Excel風） ===== */
+#data-table { font-size: 0.8rem; }
+#data-table thead th {
+  padding: 5px 8px;
+  font-size: 0.72rem;
+  background: #f5f5f7;
+  border-right: 1px solid var(--border-soft);
+  white-space: nowrap;
+}
+#data-table thead th.th-income { box-shadow: inset 0 3px 0 #1d7d3f; }
+#data-table thead th.th-expense { box-shadow: inset 0 3px 0 #d70015; }
+
+#data-table tbody td {
+  padding: 2px 6px;
+  border-right: 1px solid var(--border-soft);
+  vertical-align: middle;
+  white-space: nowrap;
+}
+#data-table tbody tr.edit-row:hover td { background: #f5f8ff; }
+#data-table td.center { text-align: center; }
+#data-table td.ellipsis { max-width: 240px; overflow: hidden; text-overflow: ellipsis; }
+
+/* セル内入力欄：罫線に溶け込ませる */
+#data-table .cat-input,
+#data-table .memo-input,
+#data-table .row-property,
+#data-table .entity-select {
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid transparent;
+  background: transparent;
+  padding: 3px 6px;
+  font-size: 0.8rem;
+  border-radius: 4px;
+  color: var(--text);
+}
+#data-table .cat-input { text-align: right; font-variant-numeric: tabular-nums; }
+#data-table .entity-select { padding: 2px 4px; cursor: pointer; }
+#data-table input:focus,
+#data-table select:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 2px rgba(0, 113, 227, 0.18);
+}
+
+/* 控除（行の方向と反対）になる分類セル */
+#data-table td.control-cell .cat-input { background: #fff5f5; color: #b91c1c; }
+#data-table td.control-cell .cat-input:focus { background: #fff; }
+
+/* 差額セル */
+#data-table .diff-cell { font-variant-numeric: tabular-nums; padding-right: 10px; }
+#data-table .diff-cell.diff-ok { color: #1d7d3f; }
+#data-table .diff-cell.diff-ng { color: #d70015; font-weight: 600; }
+
+/* 列ごとの最小幅 */
+#data-table .col-date { min-width: 78px; }
+#data-table .col-description { min-width: 150px; max-width: 240px; }
+#data-table .col-property { min-width: 130px; max-width: 180px; }
+#data-table .col-deposit,
+#data-table .col-withdrawal,
+#data-table .col-balance { min-width: 86px; text-align: right; }
+#data-table .col-entity { min-width: 56px; }
+#data-table .col-cat { min-width: 86px; }
+#data-table .col-memo { min-width: 130px; }
+#data-table .col-diff { min-width: 84px; }
+#data-table .col-del { min-width: 32px; }
+
+/* 数値の右寄せ（カテゴリ列はinput側で右寄せ） */
+#data-table td.num { text-align: right; }

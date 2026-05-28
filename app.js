@@ -1130,7 +1130,7 @@ function renderBalanceAlert(acc) {
   });
 }
 
-// 「2. 明細の確認・分類の入力」＝未保存の取引のみ
+// 「2. 明細の確認・分類の入力」＝未保存の取引のみ（1取引＝1行のExcel風）
 function renderEditTable(acc, roles) {
   const unsaved = acc.transactions.filter((t) => !t.saved);
   if (unsaved.length === 0) {
@@ -1138,69 +1138,195 @@ function renderEditTable(acc, roles) {
     return;
   }
   editSection.classList.remove("hidden");
-  const tcols = topColumns(roles);
   rowSummary.textContent = `未保存：${unsaved.length}件`;
 
-  // ヘッダ（役割名を使用・摘要の隣に物件名）
+  const cols = editColumns(roles, acc);
+
+  // ヘッダ
   tableHead.innerHTML = "";
   const headRow = document.createElement("tr");
-  tcols.forEach((c) => {
+  cols.forEach((c) => {
     const th = document.createElement("th");
     th.textContent = c.label;
+    th.classList.add("col-" + c.key);
     if (c.num) th.classList.add("num");
+    if (c.key === "cat") {
+      th.classList.add(c.home === "入金" ? "th-income" : "th-expense");
+      th.title = c.home === "入金"
+        ? "入金カテゴリ。入金行で入力＝収入(＋)／出金行で入力＝控除(−)。"
+        : "出金カテゴリ。出金行で入力＝支出(＋)／入金行で入力＝控除(−)。";
+    }
     headRow.appendChild(th);
   });
-  headRow.appendChild(document.createElement("th")); // 削除ボタン列
   tableHead.appendChild(headRow);
 
-  const totalCols = tcols.length + 1;
-
-  // 本体（1取引＝2行：通帳データ＋分類入力を一段下げて表示）
+  // 本体
   tableBody.innerHTML = "";
-  acc.transactions.forEach((tx, rowIndex) => {
+  acc.transactions.forEach((tx) => {
     if (tx.saved) return;
     if (!tx.items) tx.items = [];
     if (tx.entity == null) tx.entity = "";
     const dir = dirOf(roles, tx.cells);
-
-    // 1行目：通帳データ（＋物件名入力）
-    const trMain = document.createElement("tr");
-    trMain.className = "tx-main";
-    tcols.forEach((c) => {
-      const td = document.createElement("td");
-      if (c.key === "__property") {
-        td.className = "property-cell";
-        td.appendChild(buildPropertyInput(acc, tx, dir));
-      } else {
-        td.textContent = displayValue(roles, tx.cells, c);
-        if (c.num) td.classList.add("num");
-      }
-      trMain.appendChild(td);
-    });
-    const tdDel = document.createElement("td");
-    tdDel.className = "del-cell";
-    const delBtn = document.createElement("button");
-    delBtn.className = "del-btn";
-    delBtn.textContent = "✕";
-    delBtn.title = "この取引を削除";
-    delBtn.addEventListener("click", () => {
-      acc.transactions.splice(rowIndex, 1);
-      saveStore();
-      renderTable();
-    });
-    tdDel.appendChild(delBtn);
-    trMain.appendChild(tdDel);
-    tableBody.appendChild(trMain);
-
-    // 2行目：分類入力（一段下げ）
-    const trDetail = document.createElement("tr");
-    trDetail.className = "tx-detail";
-    const tdDetail = document.createElement("td");
-    tdDetail.colSpan = totalCols;
-    tdDetail.appendChild(buildDetailInner(acc, tx, rowIndex, dir));
-    trDetail.appendChild(tdDetail);
-    tableBody.appendChild(trDetail);
+    if (dir) normalizeItemDirs(tx, dir);
+    tableBody.appendChild(buildEditRow(acc, tx, dir, cols));
   });
+}
+
+function editColumns(roles, acc) {
+  ensureCategories();
+  const arr = [];
+  if (roles.date != null) arr.push({ key: "date", label: "日付" });
+  if (descCols(roles).length) arr.push({ key: "description", label: "摘要" });
+  arr.push({ key: "property", label: "物件名" });
+  if (roles.deposit != null || roles.amount != null) arr.push({ key: "deposit", label: "入金", num: true });
+  if (roles.withdrawal != null || roles.amount != null) arr.push({ key: "withdrawal", label: "出金", num: true });
+  if (roles.balance != null) arr.push({ key: "balance", label: "残高", num: true });
+  arr.push({ key: "entity", label: "法/個" });
+  const seen = new Set();
+  const pushCat = (cat, home) => {
+    if (!cat || seen.has(cat)) return;
+    seen.add(cat);
+    arr.push({ key: "cat", category: cat, home, label: cat, num: true });
+  };
+  store.categories["入金"].forEach((c) => pushCat(c, "入金"));
+  store.categories["出金"].forEach((c) => pushCat(c, "出金"));
+  acc.transactions.forEach((t) => {
+    (t.items || []).forEach((it) => pushCat(it.category, it.cdir || "入金"));
+  });
+  arr.push({ key: "memo", label: "メモ" });
+  arr.push({ key: "diff", label: "差額", num: true });
+  arr.push({ key: "del", label: "" });
+  return arr;
+}
+
+function buildEditRow(acc, tx, dir, cols) {
+  const roles = acc.mapping.roles;
+  const tr = document.createElement("tr");
+  tr.className = "edit-row" + (dir === "入金" ? " row-in" : dir === "出金" ? " row-out" : " row-none");
+  let diffCell = null;
+  function refreshDiff() {
+    if (!diffCell) return;
+    if (!dir) {
+      diffCell.textContent = "—";
+      diffCell.className = "num col-diff diff-cell";
+      return;
+    }
+    const income = (tx.items || []).reduce((s, it) => s + (it.cdir === dir ? toNumber(it.amount) : 0), 0);
+    const deduct = (tx.items || []).reduce((s, it) => s + (it.cdir && it.cdir !== dir ? toNumber(it.amount) : 0), 0);
+    const net = income - deduct;
+    const amt = amtOf(roles, tx.cells);
+    const diff = amt - net;
+    diffCell.textContent = diff.toLocaleString("ja-JP");
+    diffCell.className = "num col-diff diff-cell " + (diff === 0 ? "diff-ok" : "diff-ng");
+  }
+  cols.forEach((c) => {
+    const td = document.createElement("td");
+    td.classList.add("col-" + c.key);
+    if (c.num) td.classList.add("num");
+    switch (c.key) {
+      case "date":
+        td.textContent = roles.date != null ? String(tx.cells[roles.date] || "") : "";
+        break;
+      case "description": {
+        const s = descOf(roles, tx.cells);
+        td.textContent = s;
+        td.title = s;
+        td.classList.add("ellipsis");
+        break;
+      }
+      case "property":
+        td.appendChild(buildPropertyInput(acc, tx, dir));
+        break;
+      case "deposit":
+        td.textContent = dir === "入金" ? fmtNum(amtOf(roles, tx.cells)) : "";
+        break;
+      case "withdrawal":
+        td.textContent = dir === "出金" ? fmtNum(amtOf(roles, tx.cells)) : "";
+        break;
+      case "balance":
+        td.textContent = roles.balance != null ? fmtNum(tx.cells[roles.balance]) : "";
+        break;
+      case "entity":
+        td.appendChild(buildEntitySelect(acc, tx, dir));
+        td.classList.add("center");
+        break;
+      case "cat": {
+        if (dir && c.home !== dir) td.classList.add("control-cell");
+        const inp = document.createElement("input");
+        inp.type = "text";
+        inp.inputMode = "numeric";
+        inp.className = "cat-input";
+        inp.value = formatAmountInput(getItemAmount(tx, c.home, c.category));
+        inp.addEventListener("input", () => {
+          const f = formatAmountInput(inp.value);
+          inp.value = f;
+          setItemAmount(tx, c.home, c.category, f);
+          refreshDiff();
+          if (dir) learnFromTx(acc, tx, dir);
+          saveStore();
+        });
+        td.appendChild(inp);
+        break;
+      }
+      case "memo":
+        td.appendChild(buildMemoInput(tx));
+        break;
+      case "diff":
+        diffCell = td;
+        td.className = "num col-diff diff-cell";
+        break;
+      case "del": {
+        const del = document.createElement("button");
+        del.type = "button";
+        del.className = "del-btn";
+        del.textContent = "✕";
+        del.title = "この取引を削除";
+        del.addEventListener("click", () => {
+          const idx = acc.transactions.indexOf(tx);
+          if (idx >= 0) acc.transactions.splice(idx, 1);
+          saveStore();
+          renderTable();
+        });
+        td.appendChild(del);
+        td.classList.add("center");
+        break;
+      }
+    }
+    tr.appendChild(td);
+  });
+  refreshDiff();
+  return tr;
+}
+
+function buildEntitySelect(acc, tx, dir) {
+  const sel = document.createElement("select");
+  sel.className = "entity-select";
+  [["", "—"], ["法人", "法人"], ["個人", "個人"]].forEach(([v, label]) => {
+    const o = document.createElement("option");
+    o.value = v;
+    o.textContent = label;
+    if (tx.entity === v) o.selected = true;
+    sel.appendChild(o);
+  });
+  sel.addEventListener("change", () => {
+    tx.entity = sel.value;
+    if (dir) learnFromTx(acc, tx, dir);
+    saveStore();
+  });
+  return sel;
+}
+
+function buildMemoInput(tx) {
+  const inp = document.createElement("input");
+  inp.type = "text";
+  inp.className = "memo-input";
+  inp.placeholder = "メモ";
+  inp.value = tx.memo || "";
+  inp.addEventListener("input", () => {
+    tx.memo = inp.value;
+    saveStore();
+  });
+  return inp;
 }
 
 // 「3. 加筆後の通帳データ」＝保存済みの取引をExcel風に表示
