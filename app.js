@@ -479,6 +479,7 @@ function decodeBytes(buffer) {
 }
 function handleFile(file) {
   if (!file) return;
+  setImportCollapsed(true);
   const reader = new FileReader();
   reader.onload = async () => {
     try {
@@ -487,22 +488,25 @@ function handleFile(file) {
       // 旧形式 .xls（バイナリ）は非対応
       if (bytes.length >= 4 && bytes[0] === 0xd0 && bytes[1] === 0xcf && bytes[2] === 0x11 && bytes[3] === 0xe0) {
         setStatus(fileStatus, "古いExcel形式(.xls)は読み込めません。Excelで「.xlsx」または「CSV」として保存し直してください。", "error");
+        setImportCollapsed(false);
         return;
       }
       const isZip = bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
       const isXlsxName = /\.xlsx$/i.test(file.name || "");
       const sourceLabel = file.name || "(名称未設定)";
-      if (isZip || isXlsxName) {
-        const records = await parseXlsx(buf);
-        startImport(records, sourceLabel);
-      } else {
-        startImport(parseDelimited(decodeBytes(buf), ","), sourceLabel);
-      }
+      const ok = isZip || isXlsxName
+        ? startImport(await parseXlsx(buf), sourceLabel)
+        : startImport(parseDelimited(decodeBytes(buf), ","), sourceLabel);
+      if (!ok) setImportCollapsed(false);
     } catch (err) {
       setStatus(fileStatus, "読み込みに失敗しました: " + err.message, "error");
+      setImportCollapsed(false);
     }
   };
-  reader.onerror = () => setStatus(fileStatus, "ファイルの読み込みに失敗しました", "error");
+  reader.onerror = () => {
+    setStatus(fileStatus, "ファイルの読み込みに失敗しました", "error");
+    setImportCollapsed(false);
+  };
   reader.readAsArrayBuffer(file);
 }
 
@@ -641,11 +645,14 @@ function handlePaste() {
     setStatus(fileStatus, "貼り付け欄が空です", "error");
     return;
   }
+  setImportCollapsed(true);
   try {
     const delimiter = text.includes("\t") ? "\t" : ",";
-    startImport(parseDelimited(text, delimiter), "貼り付け");
+    const ok = startImport(parseDelimited(text, delimiter), "貼り付け");
+    if (!ok) setImportCollapsed(false);
   } catch (err) {
     setStatus(fileStatus, "取込に失敗しました: " + err.message, "error");
+    setImportCollapsed(false);
   }
 }
 
@@ -699,7 +706,7 @@ function startImport(records, sourceLabel) {
   const acc = getCurrentAccount();
   if (!acc) {
     setStatus(fileStatus, "先に口座を登録・選択してください", "error");
-    return;
+    return false;
   }
   const parsed = splitHeaderAndData(records, hasHeader.checked);
   lastImport = {
@@ -717,10 +724,10 @@ function startImport(records, sourceLabel) {
     renderTable();
     remapBtn.classList.remove("hidden");
     setStatus(fileStatus, importMessage(res, acc), "ok");
-    if (res.added > 0) importSection.classList.add("collapsed");
   } else {
     openMapping(guessRoles(lastImport.columns, lastImport.hasHeader));
   }
+  return true;
 }
 
 function newBatchId() {
@@ -984,7 +991,7 @@ function applyMapping() {
   remapBtn.classList.remove("hidden");
   renderTable();
   setStatus(fileStatus, importMessage(res, acc), "ok");
-  if (res.added > 0) importSection.classList.add("collapsed");
+  setImportCollapsed(true);
 }
 
 // ===== 重複判定 =====
@@ -1248,6 +1255,7 @@ function editColumns(roles, acc) {
   if (roles.date != null) arr.push({ key: "date", label: "日付" });
   if (descCols(roles).length) arr.push({ key: "description", label: "摘要" });
   arr.push({ key: "property", label: "物件名" });
+  arr.push({ key: "dir", label: "区分" });
   if (roles.deposit != null || roles.amount != null) arr.push({ key: "deposit", label: "入金", num: true });
   if (roles.withdrawal != null || roles.amount != null) arr.push({ key: "withdrawal", label: "出金", num: true });
   if (roles.balance != null) arr.push({ key: "balance", label: "残高", num: true });
@@ -1307,6 +1315,14 @@ function buildEditRow(acc, tx, dir, cols) {
       case "property":
         td.appendChild(buildPropertyInput(acc, tx, dir));
         break;
+      case "dir": {
+        const badge = document.createElement("span");
+        badge.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
+        badge.textContent = dir || "区分不明";
+        td.appendChild(badge);
+        td.classList.add("center");
+        break;
+      }
       case "deposit":
         td.textContent = dir === "入金" ? fmtNum(amtOf(roles, tx.cells)) : "";
         break;
@@ -2063,9 +2079,13 @@ helpClose.addEventListener("click", closeHelp);
 helpOverlay.addEventListener("click", closeHelp);
 
 // 取り込みセクション 折りたたみ
-function collapseImport() { importSection.classList.add("collapsed"); }
-function expandImport() { importSection.classList.remove("collapsed"); }
-importToggle.addEventListener("click", () => importSection.classList.toggle("collapsed"));
+function setImportCollapsed(collapsed) {
+  importSection.classList.toggle("collapsed", collapsed);
+  importToggle.classList.toggle("collapsed-state", collapsed);
+}
+importToggle.addEventListener("click", () => {
+  setImportCollapsed(!importSection.classList.contains("collapsed"));
+});
 
 // 取り込み履歴ポップオーバー
 batchesTrigger.addEventListener("click", (e) => {
@@ -2124,6 +2144,7 @@ mappingApply.addEventListener("click", applyMapping);
 mappingCancel.addEventListener("click", () => {
   mappingSection.classList.add("hidden");
   setStatus(fileStatus, "取り込みを中止しました", "");
+  setImportCollapsed(false);
 });
 
 allPeriod.addEventListener("change", syncRange);
