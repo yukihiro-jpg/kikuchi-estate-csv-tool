@@ -859,3 +859,19 @@ tr.tx-detail:hover > td { background: #fafafc; }
   font-weight: 600;
   white-space: nowrap;
 }
+
+/* ===== 取り込み履歴 ===== */
+.batches-list { display: flex; flex-direction: column; gap: 10px; }
+.batch-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 14px;
+  background: var(--fill);
+  border: 1px solid var(--border-soft);
+  border-radius: 12px;
+}
+.batch-meta { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.batch-name { font-size: 0.95rem; word-break: break-all; }
+.batch-time { font-size: 0.78rem; color: var(--muted); }
+.batch-count { font-size: 0.82rem; color: var(--muted); }

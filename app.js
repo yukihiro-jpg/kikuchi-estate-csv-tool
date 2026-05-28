@@ -122,6 +122,9 @@ const finalTableHead = document.querySelector("#final-table thead");
 const finalTableBody = document.querySelector("#final-table tbody");
 const finalSummary = $("final-summary");
 
+const batchesSection = $("batches-section");
+const batchesList = $("batches-list");
+
 const settingsDrawer = $("settings-drawer");
 const settingsOverlay = $("settings-overlay");
 const settingsClose = $("settings-close");
@@ -429,6 +432,7 @@ function renderAll() {
   if (inNew) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
+    batchesSection.classList.add("hidden");
     balanceAlert.classList.add("hidden");
   } else {
     renderTable();
@@ -461,11 +465,12 @@ function handleFile(file) {
       }
       const isZip = bytes.length >= 2 && bytes[0] === 0x50 && bytes[1] === 0x4b; // "PK"
       const isXlsxName = /\.xlsx$/i.test(file.name || "");
+      const sourceLabel = file.name || "(名称未設定)";
       if (isZip || isXlsxName) {
         const records = await parseXlsx(buf);
-        startImport(records);
+        startImport(records, sourceLabel);
       } else {
-        startImport(parseDelimited(decodeBytes(buf), ","));
+        startImport(parseDelimited(decodeBytes(buf), ","), sourceLabel);
       }
     } catch (err) {
       setStatus(fileStatus, "読み込みに失敗しました: " + err.message, "error");
@@ -612,7 +617,7 @@ function handlePaste() {
   }
   try {
     const delimiter = text.includes("\t") ? "\t" : ",";
-    startImport(parseDelimited(text, delimiter));
+    startImport(parseDelimited(text, delimiter), "貼り付け");
   } catch (err) {
     setStatus(fileStatus, "取込に失敗しました: " + err.message, "error");
   }
@@ -664,17 +669,24 @@ function splitHeaderAndData(records, headerInFirstRow) {
 }
 
 // ===== 取込開始 =====
-function startImport(records) {
+function startImport(records, sourceLabel) {
   const acc = getCurrentAccount();
   if (!acc) {
     setStatus(fileStatus, "先に口座を登録・選択してください", "error");
     return;
   }
   const parsed = splitHeaderAndData(records, hasHeader.checked);
-  lastImport = { columns: parsed.columns, dataRows: parsed.dataRows, hasHeader: hasHeader.checked };
+  lastImport = {
+    columns: parsed.columns,
+    dataRows: parsed.dataRows,
+    hasHeader: hasHeader.checked,
+    sourceLabel: sourceLabel || "(不明)",
+  };
 
   if (acc.mapping) {
-    const res = mergeIntoAccount(acc, lastImport.dataRows, acc.mapping.roles);
+    const batchId = newBatchId();
+    const res = mergeIntoAccount(acc, lastImport.dataRows, acc.mapping.roles, batchId);
+    recordBatch(acc, batchId, lastImport.sourceLabel, res.added);
     saveStore();
     renderTable();
     remapBtn.classList.remove("hidden");
@@ -682,6 +694,20 @@ function startImport(records) {
   } else {
     openMapping(guessRoles(lastImport.columns, lastImport.hasHeader));
   }
+}
+
+function newBatchId() {
+  return "b_" + Date.now() + "_" + Math.random().toString(36).slice(2, 7);
+}
+function recordBatch(acc, batchId, filename, addedCount) {
+  if (addedCount <= 0) return;
+  if (!Array.isArray(acc.batches)) acc.batches = [];
+  acc.batches.unshift({
+    id: batchId,
+    filename: filename || "(不明)",
+    importedAt: new Date().toISOString(),
+    addedCount,
+  });
 }
 function importMessage(res, acc) {
   return (
@@ -923,7 +949,9 @@ function applyMapping() {
     return;
   }
   acc.mapping = { hasHeader: lastImport.hasHeader, columns: lastImport.columns.slice(), roles };
-  const res = mergeIntoAccount(acc, lastImport.dataRows, roles);
+  const batchId = newBatchId();
+  const res = mergeIntoAccount(acc, lastImport.dataRows, roles, batchId);
+  recordBatch(acc, batchId, lastImport.sourceLabel, res.added);
   saveStore();
   mappingSection.classList.add("hidden");
   remapBtn.classList.remove("hidden");
@@ -942,7 +970,7 @@ function rowKey(cells, roles) {
 }
 
 // ===== 取り込み（重複除外＋学習の事前反映） =====
-function mergeIntoAccount(acc, dataRows, roles) {
+function mergeIntoAccount(acc, dataRows, roles, batchId) {
   const cols = acc.mapping.columns;
   const existing = new Set(acc.transactions.map((t) => rowKey(t.cells, roles)));
   let added = 0, dup = 0, skipped = 0;
@@ -961,6 +989,7 @@ function mergeIntoAccount(acc, dataRows, roles) {
       property: applied.property,
       memo: "",
       saved: false,
+      batchId: batchId || null,
       items: applied.items,
     });
     added++;
@@ -993,13 +1022,73 @@ function renderTable() {
   if (!acc || !acc.mapping) {
     editSection.classList.add("hidden");
     finalSection.classList.add("hidden");
+    batchesSection.classList.add("hidden");
     balanceAlert.classList.add("hidden");
     return;
   }
   const roles = acc.mapping.roles;
   renderEditTable(acc, roles);
   renderFinalTable(acc, roles);
+  renderBatches(acc);
   renderBalanceAlert(acc);
+}
+
+function renderBatches(acc) {
+  const batches = Array.isArray(acc.batches) ? acc.batches : [];
+  if (batches.length === 0) {
+    batchesSection.classList.add("hidden");
+    return;
+  }
+  batchesSection.classList.remove("hidden");
+  batchesList.innerHTML = "";
+  batches.forEach((b) => {
+    const remaining = acc.transactions.filter((t) => t.batchId === b.id).length;
+    if (remaining === 0) return; // すべて削除済みのバッチは非表示
+    const row = document.createElement("div");
+    row.className = "batch-row";
+
+    const meta = document.createElement("div");
+    meta.className = "batch-meta";
+    const name = document.createElement("strong");
+    name.className = "batch-name";
+    name.textContent = b.filename;
+    meta.appendChild(name);
+    const time = document.createElement("span");
+    time.className = "batch-time";
+    time.textContent = formatDateTime(b.importedAt);
+    meta.appendChild(time);
+    const count = document.createElement("span");
+    count.className = "batch-count";
+    count.textContent = `現在 ${remaining}件（取り込み時 ${b.addedCount}件）`;
+    meta.appendChild(count);
+    row.appendChild(meta);
+
+    const del = document.createElement("button");
+    del.type = "button";
+    del.className = "btn btn-danger";
+    del.textContent = "この取り込みを削除";
+    del.addEventListener("click", () => {
+      const ok = confirm(
+        `「${b.filename}」の取り込み（現在 ${remaining}件）を削除します。\n\n未保存・保存済みの両方から削除されます。元に戻せません。よろしいですか？`
+      );
+      if (!ok) return;
+      acc.transactions = acc.transactions.filter((t) => t.batchId !== b.id);
+      acc.batches = acc.batches.filter((x) => x.id !== b.id);
+      saveStore();
+      renderAll();
+    });
+    row.appendChild(del);
+    batchesList.appendChild(row);
+  });
+  if (!batchesList.children.length) batchesSection.classList.add("hidden");
+}
+
+function formatDateTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
 function renderBalanceAlert(acc) {
