@@ -955,17 +955,17 @@ tr.tx-detail:hover > td { background: #fafafc; }
 .section-toggle {
   background: rgba(0, 0, 0, 0.05);
   border: none;
-  width: 28px;
+  min-width: 28px;
   height: 28px;
+  padding: 0 8px;
   border-radius: 980px;
   cursor: pointer;
   font-size: 0.75rem;
   color: var(--muted);
-  transition: transform 0.2s ease, background 0.15s ease;
+  transition: background 0.15s ease;
 }
 .section-toggle:hover { background: rgba(0, 0, 0, 0.09); color: var(--text); }
 .collapsed > .section-body { display: none; }
-.collapsed .section-toggle { transform: rotate(-90deg); }
 
 /* ===== 取り込み履歴ポップオーバー ===== */
 .batches-trigger {
@@ -1065,3 +1065,12 @@ main { max-width: min(1640px, calc(100vw - 32px)); padding: 0 16px; }
 #data-table .col-dir { min-width: 70px; }
 #data-table tbody td.col-dir { text-align: center; }
 #data-table td .dir-badge { font-size: 0.72rem; padding: 1px 8px; }
+
+/* ===== 編集テーブルをより縦長に・行をやや詰める ===== */
+#edit-section .table-wrap { max-height: 86vh; }
+#data-table { line-height: 1.35; }
+#data-table tbody td { padding: 1px 6px; }
+#data-table tbody td .dir-badge { padding: 1px 8px; font-size: 0.74rem; }
+#data-table tbody .cat-input,
+#data-table tbody .memo-input,
+#data-table tbody .row-property { padding: 2px 6px; }

@@ -1453,11 +1453,12 @@ function renderFinalTable(acc, roles) {
   const baseCols = [
     { label: "日付" },
     { label: "摘要" },
+    { label: "物件名" },
+    { label: "区分" },
     { label: "入金", num: true },
     { label: "出金", num: true },
     { label: "残高", num: true },
     { label: "法人/個人" },
-    { label: "物件名" },
   ];
   baseCols.forEach((c) => {
     const th = document.createElement("th");
@@ -1485,21 +1486,19 @@ function renderFinalTable(acc, roles) {
     const amt = amtOf(roles, tx.cells);
     const tr = document.createElement("tr");
 
-    const cells = [
-      { v: roles.date != null ? String(tx.cells[roles.date] || "") : "" },
-      { v: descOf(roles, tx.cells) },
-      { v: dir === "入金" ? fmtNum(amt) : "", num: true },
-      { v: dir === "出金" ? fmtNum(amt) : "", num: true },
-      { v: roles.balance != null ? fmtNum(tx.cells[roles.balance]) : "", num: true },
-      { v: tx.entity || "" },
-      { v: tx.property || "" },
-    ];
-    cells.forEach((c) => {
-      const td = document.createElement("td");
-      td.textContent = c.v;
-      if (c.num) td.classList.add("num");
-      tr.appendChild(td);
-    });
+    const tdDate = document.createElement("td"); tdDate.textContent = roles.date != null ? String(tx.cells[roles.date] || "") : ""; tr.appendChild(tdDate);
+    const tdDesc = document.createElement("td"); tdDesc.textContent = descOf(roles, tx.cells); tr.appendChild(tdDesc);
+    const tdProp = document.createElement("td"); tdProp.textContent = tx.property || ""; tr.appendChild(tdProp);
+    const tdDir = document.createElement("td"); tdDir.className = "center";
+    const dirBadge = document.createElement("span");
+    dirBadge.className = "dir-badge " + (dir === "入金" ? "dir-in" : dir === "出金" ? "dir-out" : "dir-none");
+    dirBadge.textContent = dir || "区分不明";
+    tdDir.appendChild(dirBadge);
+    tr.appendChild(tdDir);
+    const tdIn = document.createElement("td"); tdIn.className = "num"; tdIn.textContent = dir === "入金" ? fmtNum(amt) : ""; tr.appendChild(tdIn);
+    const tdOut = document.createElement("td"); tdOut.className = "num"; tdOut.textContent = dir === "出金" ? fmtNum(amt) : ""; tr.appendChild(tdOut);
+    const tdBal = document.createElement("td"); tdBal.className = "num"; tdBal.textContent = roles.balance != null ? fmtNum(tx.cells[roles.balance]) : ""; tr.appendChild(tdBal);
+    const tdEnt = document.createElement("td"); tdEnt.textContent = tx.entity || ""; tr.appendChild(tdEnt);
     catCols.forEach((cat) => {
       const td = document.createElement("td");
       td.classList.add("num");
